@@ -12,11 +12,16 @@ CREATE TABLE public.profiles (
     id uuid PRIMARY KEY
         REFERENCES auth.users(id)
         ON DELETE CASCADE,
-    rol text NOT NULL,
+    email text,
+    nombre text,
+    rol text NOT NULL DEFAULT 'trabajador',
     created_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT profiles_rol_chk
         CHECK (rol IN ('trabajador', 'administrador'))
 );
+
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS nombre text;
 
 CREATE TABLE public.producciones_leche (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

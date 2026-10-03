@@ -1,10 +1,18 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Session, User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+
+export interface UserProfile {
+  id: string;
+  email: string | null;
+  nombre: string | null;
+  rol: 'trabajador' | 'administrador' | null;
+}
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
+  profile: UserProfile | null;
   rol: 'trabajador' | 'administrador' | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -13,6 +21,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
+  profile: null,
   rol: null,
   loading: true,
   signOut: async () => {},
@@ -21,6 +30,7 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [rol, setRol] = useState<'trabajador' | 'administrador' | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -44,6 +54,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (session?.user) {
           fetchProfile(session.user.id);
         } else {
+          setProfile(null);
           setRol(null);
           setLoading(false);
         }
@@ -57,14 +68,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('rol')
+        .select('id, email, nombre, rol')
         .eq('id', userId)
         .single();
       
       if (error) throw error;
-      setRol(data.rol as 'trabajador' | 'administrador');
+      if (data) {
+        const userProfile: UserProfile = {
+          id: data.id,
+          email: data.email ?? null,
+          nombre: data.nombre ?? null,
+          rol: (data.rol as 'trabajador' | 'administrador') ?? null,
+        };
+        setProfile(userProfile);
+        setRol(userProfile.rol);
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
+      setProfile(null);
       setRol(null);
     } finally {
       setLoading(false);
@@ -76,7 +97,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, rol, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, profile, rol, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

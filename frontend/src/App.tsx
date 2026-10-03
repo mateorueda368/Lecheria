@@ -1,7 +1,20 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
 import RegistrarProduccion from './pages/RegistrarProduccion';
+import HistorialProduccion from './pages/HistorialProduccion';
+import RegistrarVenta from './pages/RegistrarVenta';
+import RegistrarFiado from './pages/RegistrarFiado';
+import RegistrarConsumo from './pages/RegistrarConsumo';
+import RegistrarQuesera from './pages/RegistrarQuesera';
+import CobrarFiado from './pages/CobrarFiado';
+import LiquidacionQuesera from './pages/LiquidacionQuesera';
+import RegistrarEgreso from './pages/RegistrarEgreso';
+import CierreCaja from './pages/CierreCaja';
+import RegistrarCorreccion from './pages/RegistrarCorreccion';
+import HistorialCaja from './pages/HistorialCaja';
+import EstadoClientes from './pages/EstadoClientes';
 
 function App() {
   return (
@@ -11,8 +24,20 @@ function App() {
         
         {/* Rutas Protegidas dentro del Layout */}
         <Route path="/" element={<Layout />}>
-          <Route index element={<RegistrarProduccion />} />
-          {/* Aquí se agregarán más rutas en el futuro: ventas, caja, etc. */}
+          <Route index element={<Dashboard />} />
+          <Route path="produccion" element={<HistorialProduccion />} />
+          <Route path="registrar" element={<RegistrarProduccion />} />
+          <Route path="venta-directa" element={<RegistrarVenta />} />
+          <Route path="fiados" element={<RegistrarFiado />} />
+          <Route path="consumo" element={<RegistrarConsumo />} />
+          <Route path="quesera" element={<RegistrarQuesera />} />
+          <Route path="cobrar-fiado" element={<CobrarFiado />} />
+          <Route path="liquidacion-quesera" element={<LiquidacionQuesera />} />
+          <Route path="egresos" element={<RegistrarEgreso />} />
+          <Route path="cierre-caja" element={<CierreCaja />} />
+          <Route path="correcciones" element={<RegistrarCorreccion />} />
+          <Route path="historial-caja" element={<HistorialCaja />} />
+          <Route path="clientes" element={<EstadoClientes />} />
         </Route>
 
         {/* Fallback */}
@@ -23,3 +48,4 @@ function App() {
 }
 
 export default App;
+
