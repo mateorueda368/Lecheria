@@ -36,7 +36,7 @@ function App() {
           <Route path="liquidacion-quesera" element={<RequireAdmin><LiquidacionQuesera /></RequireAdmin>} />
           <Route path="egresos" element={<RequireAdmin><RegistrarEgreso /></RequireAdmin>} />
           <Route path="cierre-caja" element={<RequireAdmin><CierreCaja /></RequireAdmin>} />
-          <Route path="correcciones" element={<RequireAdmin><RegistrarCorreccion /></RequireAdmin>} />
+          <Route path="correcciones" element={<RegistrarCorreccion />} />
           <Route path="historial-caja" element={<RequireAdmin><HistorialCaja /></RequireAdmin>} />
           <Route path="clientes" element={<RequireAdmin><EstadoClientes /></RequireAdmin>} />
         </Route>

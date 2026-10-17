@@ -64,19 +64,25 @@ export default function RegistrarCorreccion() {
     e.preventDefault();
     setMensaje(null);
 
-    if (!isAdmin) {
-      setMensaje({ type: 'error', text: 'Solo los administradores pueden registrar correcciones.' });
-      return;
-    }
-
     if (!motivo.trim()) {
       setMensaje({ type: 'error', text: 'Por favor ingresa un motivo obligatorio para justificar la corrección.' });
       return;
     }
 
-    if (litrosNum === 0 && montoNum === 0) {
-      setMensaje({ type: 'error', text: 'Ingresa una diferencia en litros o en monto (positiva o negativa).' });
-      return;
+    if (!isAdmin) {
+      if (modulo === 'caja') {
+        setMensaje({ type: 'error', text: 'Los trabajadores no pueden realizar ajustes sobre el módulo de caja.' });
+        return;
+      }
+      if (litrosNum === 0) {
+        setMensaje({ type: 'error', text: 'Debes ingresar una diferencia en litros (+/-) diferente de cero.' });
+        return;
+      }
+    } else {
+      if (litrosNum === 0 && montoNum === 0) {
+        setMensaje({ type: 'error', text: 'Ingresa una diferencia en litros o en monto (positiva o negativa).' });
+        return;
+      }
     }
 
     setSaving(true);
@@ -87,7 +93,7 @@ export default function RegistrarCorreccion() {
         p_modulo: modulo,
         p_registro_id: null,
         p_litros_diferencia: litrosNum,
-        p_monto_diferencia: montoNum,
+        p_monto_diferencia: isAdmin ? montoNum : 0,
         p_motivo: motivo.trim(),
       });
 
@@ -129,99 +135,105 @@ export default function RegistrarCorreccion() {
         </span>
       </div>
 
-      {/* Admin Guard Banner */}
+      {/* Informative Banner for Worker */}
       {!isAdmin && (
-        <div className="card-dark p-4 border-amber-500/30 flex items-center gap-3">
-          <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="card-dark p-4 border-indigo-500/30 flex items-start gap-3 bg-indigo-950/20">
+          <svg className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-sm text-amber-300 font-medium">
-            Solo administradores pueden registrar correcciones. Puedes ver el historial de auditoría.
-          </p>
+          <div>
+            <p className="text-sm text-indigo-200 font-semibold">
+              Correcciones Operativas Habilitadas
+            </p>
+            <p className="text-xs text-indigo-300/80 mt-0.5">
+              Como trabajador puedes registrar ajustes de litros en producción, ventas, consumo y quesera. Los ajustes financieros en caja son exclusivos del administrador.
+            </p>
+          </div>
         </div>
       )}
 
       {/* Form */}
-      {isAdmin && (
-        <form onSubmit={handleSubmit} className="card-dark p-6 space-y-6">
-          <h3 className="font-bold text-slate-100 text-lg border-b border-slate-800 pb-3">
-            Registrar Nueva Corrección Trazable
-          </h3>
+      <form onSubmit={handleSubmit} className="card-dark p-6 space-y-6">
+        <h3 className="font-bold text-slate-100 text-lg border-b border-slate-800 pb-3">
+          Registrar Nueva Corrección Trazable
+        </h3>
 
-          {/* Alert */}
-          {mensaje && (
-            <div className={`p-4 rounded-xl flex items-start gap-3 border animate-slide-up ${
-              mensaje.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/30'
-                : 'bg-rose-500/10 border-rose-500/30'
-            }`}>
-              <svg className={`w-5 h-5 mt-0.5 flex-shrink-0 ${mensaje.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}
-                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                {mensaje.type === 'success'
-                  ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                }
-              </svg>
-              <p className={`text-sm font-semibold ${mensaje.type === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}>
-                {mensaje.text}
-              </p>
-            </div>
-          )}
+        {/* Alert */}
+        {mensaje && (
+          <div className={`p-4 rounded-xl flex items-start gap-3 border animate-slide-up ${
+            mensaje.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/30'
+              : 'bg-rose-500/10 border-rose-500/30'
+          }`}>
+            <svg className={`w-5 h-5 mt-0.5 flex-shrink-0 ${mensaje.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {mensaje.type === 'success'
+                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              }
+            </svg>
+            <p className={`text-sm font-semibold ${mensaje.type === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}>
+              {mensaje.text}
+            </p>
+          </div>
+        )}
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-            {/* Módulo */}
-            <div className="space-y-2">
-              <label htmlFor="modulo" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Módulo a Corregir
-              </label>
-              <select
-                id="modulo"
-                value={modulo}
-                onChange={(e) => setModulo(e.target.value as typeof modulo)}
-                className="input-dark w-full px-4 py-3 font-semibold capitalize"
-              >
-                <option value="produccion">Producción (Leche)</option>
-                <option value="venta">Venta Directa</option>
-                <option value="consumo">Consumo de Finca</option>
-                <option value="quesera">Entrega Quesera</option>
-                <option value="caja">Caja Física</option>
-              </select>
-            </div>
-
-            {/* Fecha */}
-            <div className="space-y-2">
-              <label htmlFor="fecha" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Fecha del Registro Original
-              </label>
-              <input
-                type="date"
-                id="fecha"
-                required
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                className="input-dark w-full px-4 py-3 font-semibold"
-              />
-            </div>
-
-            {/* Litros */}
-            <div className="space-y-2">
-              <label htmlFor="litrosDif" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Diferencia Litros (+/-)
-              </label>
-              <input
-                type="number"
-                id="litrosDif"
-                step="0.01"
-                placeholder="Ej. -2.5 o +5"
-                value={litrosDif}
-                onChange={(e) => setLitrosDif(e.target.value)}
-                className="input-dark w-full px-4 py-3 font-bold text-lg"
-              />
-            </div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          {/* Módulo */}
+          <div className="space-y-2">
+            <label htmlFor="modulo" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Módulo a Corregir
+            </label>
+            <select
+              id="modulo"
+              value={modulo}
+              onChange={(e) => setModulo(e.target.value as typeof modulo)}
+              className="input-dark w-full px-4 py-3 font-semibold capitalize"
+            >
+              <option value="produccion">Producción (Leche)</option>
+              <option value="venta">Venta Directa</option>
+              <option value="consumo">Consumo de Finca</option>
+              <option value="quesera">Entrega Quesera</option>
+              {isAdmin && <option value="caja">Caja Física (Solo Admin)</option>}
+            </select>
           </div>
 
-          {/* Monto */}
+          {/* Fecha */}
+          <div className="space-y-2">
+            <label htmlFor="fecha" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Fecha del Registro Original
+            </label>
+            <input
+              type="date"
+              id="fecha"
+              required
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="input-dark w-full px-4 py-3 font-semibold"
+            />
+          </div>
+
+          {/* Litros */}
+          <div className="space-y-2">
+            <label htmlFor="litrosDif" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Diferencia Litros (+/-) {isAdmin ? '' : '*'}
+            </label>
+            <input
+              type="number"
+              id="litrosDif"
+              step="0.01"
+              required={!isAdmin}
+              placeholder="Ej. -2.5 o +5"
+              value={litrosDif}
+              onChange={(e) => setLitrosDif(e.target.value)}
+              className="input-dark w-full px-4 py-3 font-bold text-lg"
+            />
+          </div>
+        </div>
+
+        {/* Monto */}
+        {isAdmin ? (
           <div className="space-y-2">
             <label htmlFor="montoDif" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
               Diferencia en Caja ($COP) (+/-)
@@ -236,39 +248,49 @@ export default function RegistrarCorreccion() {
               className="input-dark w-full px-4 py-3 font-bold text-lg"
             />
           </div>
-
-          {/* Motivo */}
-          <div className="space-y-2">
-            <label htmlFor="motivo" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Motivo Obligatorio *
-            </label>
-            <textarea
-              id="motivo"
-              required
-              rows={3}
-              placeholder="Explica detalladamente por qué se realiza este ajuste…"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              className="input-dark w-full px-4 py-3 font-medium resize-none"
-            />
+        ) : (
+          <div className="p-3.5 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-400">
+            <span className="flex items-center gap-2">
+              <span className="text-slate-500 font-semibold">💰 Ajuste monetario en caja:</span>
+              <span className="text-slate-300 font-bold">0 COP</span>
+            </span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+              Solo Administrador
+            </span>
           </div>
+        )}
 
-          <button
-            type="submit"
-            disabled={saving || !motivo.trim()}
-            className="w-full flex justify-center items-center gap-2 py-4 px-4
-                       bg-violet-600 hover:bg-violet-500 active:scale-[0.98]
-                       text-white rounded-xl font-bold shadow-lg shadow-violet-900/40
-                       transition-all disabled:opacity-50 disabled:pointer-events-none
-                       glow-violet"
-          >
-            {saving
-              ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Guardando…</>
-              : 'Registrar Corrección Trazable'
-            }
-          </button>
-        </form>
-      )}
+        {/* Motivo */}
+        <div className="space-y-2">
+          <label htmlFor="motivo" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Motivo Obligatorio *
+          </label>
+          <textarea
+            id="motivo"
+            required
+            rows={3}
+            placeholder="Explica detalladamente por qué se realiza este ajuste…"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            className="input-dark w-full px-4 py-3 font-medium resize-none"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={saving || !motivo.trim()}
+          className="w-full flex justify-center items-center gap-2 py-4 px-4
+                     bg-violet-600 hover:bg-violet-500 active:scale-[0.98]
+                     text-white rounded-xl font-bold shadow-lg shadow-violet-900/40
+                     transition-all disabled:opacity-50 disabled:pointer-events-none
+                     glow-violet"
+        >
+          {saving
+            ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Guardando…</>
+            : 'Registrar Corrección Trazable'
+          }
+        </button>
+      </form>
 
       {/* Historial */}
       <div className="card-dark overflow-hidden">

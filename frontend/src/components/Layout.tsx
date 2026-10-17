@@ -34,6 +34,7 @@ export default function Layout() {
     { to: '/fiados', label: 'Venta Fiada', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586' },
     { to: '/consumo', label: 'Consumo Finca', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3' },
     { to: '/quesera', label: 'Entrega Quesera', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5' },
+    { to: '/correcciones', label: 'Correcciones Trazables', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11' },
   ];
 
   const adminNavItems = [
@@ -43,7 +44,6 @@ export default function Layout() {
     { to: '/egresos', label: 'Registrar Egreso', short: 'Egresos', icon: 'M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z' },
     { to: '/cierre-caja', label: 'Cierre de Caja', short: 'Cierre', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6' },
     { to: '/historial-caja', label: 'Historial Caja', short: 'Hist. Caja', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10' },
-    { to: '/correcciones', label: 'Correcciones Trazables', short: 'Correcciones', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11' },
   ];
 
   return (
@@ -140,6 +140,17 @@ export default function Layout() {
                 }
               >
                 Quesera
+              </NavLink>
+
+              <NavLink
+                to="/correcciones"
+                className={({ isActive }) =>
+                  `px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    isActive ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`
+                }
+              >
+                Correcciones
               </NavLink>
 
               {isAdmin && adminNavItems.map(item => (
