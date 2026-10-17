@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import RequireAdmin from './components/RequireAdmin';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import RegistrarProduccion from './pages/RegistrarProduccion';
@@ -31,13 +32,13 @@ function App() {
           <Route path="fiados" element={<RegistrarFiado />} />
           <Route path="consumo" element={<RegistrarConsumo />} />
           <Route path="quesera" element={<RegistrarQuesera />} />
-          <Route path="cobrar-fiado" element={<CobrarFiado />} />
-          <Route path="liquidacion-quesera" element={<LiquidacionQuesera />} />
-          <Route path="egresos" element={<RegistrarEgreso />} />
-          <Route path="cierre-caja" element={<CierreCaja />} />
-          <Route path="correcciones" element={<RegistrarCorreccion />} />
-          <Route path="historial-caja" element={<HistorialCaja />} />
-          <Route path="clientes" element={<EstadoClientes />} />
+          <Route path="cobrar-fiado" element={<RequireAdmin><CobrarFiado /></RequireAdmin>} />
+          <Route path="liquidacion-quesera" element={<RequireAdmin><LiquidacionQuesera /></RequireAdmin>} />
+          <Route path="egresos" element={<RequireAdmin><RegistrarEgreso /></RequireAdmin>} />
+          <Route path="cierre-caja" element={<RequireAdmin><CierreCaja /></RequireAdmin>} />
+          <Route path="correcciones" element={<RequireAdmin><RegistrarCorreccion /></RequireAdmin>} />
+          <Route path="historial-caja" element={<RequireAdmin><HistorialCaja /></RequireAdmin>} />
+          <Route path="clientes" element={<RequireAdmin><EstadoClientes /></RequireAdmin>} />
         </Route>
 
         {/* Fallback */}

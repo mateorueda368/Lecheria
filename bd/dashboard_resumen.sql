@@ -31,8 +31,15 @@ BEGIN
   -- 1. Stock actual de leche
   -- Producciones son positivas, todo lo demás es negativo en movimientos_leche
   -- Los tipos de egreso de leche se almacenan con litros POSITIVOS pero son salidas
+  -- 1. Stock actual de leche considerando correcciones
   SELECT COALESCE(
-    SUM(CASE WHEN tipo = 'produccion' THEN litros ELSE -litros END),
+    SUM(
+      CASE 
+        WHEN tipo = 'produccion' THEN litros 
+        WHEN tipo = 'correccion' THEN litros 
+        ELSE -litros 
+      END
+    ),
     0
   )
   INTO v_stock_leche
@@ -49,24 +56,25 @@ BEGIN
   WHERE pl.fecha = CURRENT_DATE;
 
   -- 3. Caja esperada: base del último cierre + movimientos POSTERIORES al cierre
-  --    Si no hay cierre previo, se toman todos los movimientos (período inicial).
   SELECT cc.fecha, cc.base_siguiente, cc.created_at
   INTO v_ultimo_cierre_fecha, v_ultimo_cierre_monto, v_ultimo_cierre_ts
   FROM public.cierres_caja cc
   ORDER BY cc.created_at DESC
   LIMIT 1;
 
+  -- Ingresos + correcciones positivas a caja
   SELECT COALESCE(SUM(mc.monto), 0)
   INTO v_ingresos_caja
   FROM public.movimientos_caja mc
-  WHERE mc.tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera')
+  WHERE (mc.tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera') OR (mc.tipo = 'correccion' AND mc.monto > 0))
     AND (v_ultimo_cierre_ts IS NULL OR mc.created_at > v_ultimo_cierre_ts);
 
-  SELECT COALESCE(SUM(mc.monto), 0)
+  -- Egresos + correcciones negativas a caja (excluyendo retiro automático de cierre previo)
+  SELECT COALESCE(SUM(ABS(mc.monto)), 0)
   INTO v_egresos_caja
   FROM public.movimientos_caja mc
-  WHERE mc.tipo IN ('egreso_flete', 'retiro')
-    AND (mc.concepto IS NULL OR mc.concepto NOT LIKE '%cierre de caja%')
+  WHERE ((mc.tipo IN ('egreso_flete', 'retiro') AND (mc.concepto IS NULL OR mc.concepto NOT LIKE '%cierre de caja%'))
+         OR (mc.tipo = 'correccion' AND mc.monto < 0))
     AND (v_ultimo_cierre_ts IS NULL OR mc.created_at > v_ultimo_cierre_ts);
 
   v_caja_esperada := COALESCE(v_ultimo_cierre_monto, 0) + v_ingresos_caja - v_egresos_caja;

@@ -28,12 +28,9 @@ export default function HistorialProduccion() {
         .order('fecha', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       setProducciones(data || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error al cargar historial:', err);
       setErrorMsg('No se pudo cargar el historial de producción.');
     } finally {
@@ -45,7 +42,6 @@ export default function HistorialProduccion() {
     fetchProducciones();
   }, []);
 
-  // Filtrar registros para la fecha seleccionada
   const produccionesDelDia = producciones.filter((p) => p.fecha === selectedFecha);
   const prodManana = produccionesDelDia.find((p) => p.jornada === 'manana');
   const prodTarde = produccionesDelDia.find((p) => p.jornada === 'tarde');
@@ -55,186 +51,173 @@ export default function HistorialProduccion() {
   const totalDia = litrosManana + litrosTarde;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto fade-in">
+    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
+      
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Resumen de Producción</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Consulta los litros producidos y la disponibilidad diaria.
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-blue-500/10 text-blue-400 text-lg">🐄</span>
+            <h1 className="text-2xl font-black text-white tracking-tight">Historial de Ordeños</h1>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            Control de pesaje diario de leche por jornada (Mañana y Tarde) y consolidado de volumen.
           </p>
         </div>
 
         <Link
           to="/registrar"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm shadow-md shadow-blue-500/20 transition-all active:scale-95"
+          className="self-start sm:self-center px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center gap-1.5"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Registrar Producción
+          <span>+ Registrar Ordeño</span>
         </Link>
       </div>
 
+      {errorMsg && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+          {errorMsg}
+        </div>
+      )}
+
       {/* Selector de Fecha */}
-      <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <label htmlFor="select-fecha" className="text-sm font-semibold text-slate-700">
-          Fecha de consulta:
-        </label>
-        <input
-          id="select-fecha"
-          type="date"
-          value={selectedFecha}
-          onChange={(e) => setSelectedFecha(e.target.value)}
-          className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-        />
-      </div>
-
-      {/* Tarjetas de Resumen del Día */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Mañana */}
-        <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-              🌅 Mañana
-            </span>
-            {prodManana ? (
-              <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-medium">
-                Registrado
-              </span>
-            ) : (
-              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded font-medium">
-                Pendiente
-              </span>
-            )}
-          </div>
-          <div className="mt-2">
-            <span className="text-3xl font-extrabold text-slate-900">
-              {prodManana ? `${litrosManana.toLocaleString()} L` : '0 L'}
-            </span>
-            <p className="text-xs text-slate-500 mt-1">Ordeño mañana</p>
-          </div>
+      <div className="card-dark border-slate-800 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+        <div className="flex items-center gap-3">
+          <label htmlFor="fecha" className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Fecha de Consulta:
+          </label>
+          <input
+            type="date"
+            id="fecha"
+            value={selectedFecha}
+            onChange={(e) => setSelectedFecha(e.target.value)}
+            className="px-3.5 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-blue-500 transition-all"
+          />
         </div>
 
-        {/* Tarde */}
-        <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
-              🌇 Tarde
-            </span>
-            {prodTarde ? (
-              <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-medium">
-                Registrado
-              </span>
-            ) : (
-              <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded font-medium">
-                Pendiente
-              </span>
-            )}
-          </div>
-          <div className="mt-2">
-            <span className="text-3xl font-extrabold text-slate-900">
-              {prodTarde ? `${litrosTarde.toLocaleString()} L` : '0 L'}
-            </span>
-            <p className="text-xs text-slate-500 mt-1">Ordeño tarde</p>
-          </div>
-        </div>
-
-        {/* Total del Día */}
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl p-5 text-white shadow-md shadow-blue-500/10 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-100 bg-white/20 px-2.5 py-1 rounded-full">
-              📊 Total Día
-            </span>
-          </div>
-          <div className="mt-2">
-            <span className="text-3xl font-extrabold">
-              {totalDia.toLocaleString()} L
-            </span>
-            <p className="text-xs text-blue-100 mt-1">Suma acumulada del día</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Historial Reciente */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="font-bold text-slate-900 text-lg">Historial Reciente de Ordeños</h2>
+        <div className="flex items-center gap-2">
           <button
-            onClick={fetchProducciones}
-            disabled={loading}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-1"
+            type="button"
+            onClick={() => setSelectedFecha(today)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              selectedFecha === today 
+                ? 'bg-blue-500 text-slate-950 shadow-md' 
+                : 'bg-slate-800/60 text-slate-400 hover:text-white'
+            }`}
           >
-            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Actualizar
+            Hoy
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const ayer = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+              setSelectedFecha(ayer);
+            }}
+            className="px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-bold transition-all"
+          >
+            Ayer
           </button>
         </div>
+      </div>
 
-        {errorMsg && (
-          <div className="p-4 bg-red-50 text-red-700 text-sm font-medium border-b border-red-100">
-            {errorMsg}
+      {/* Resumen del Día Seleccionado */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        
+        {/* Ordeño Mañana */}
+        <div className="card-dark border-slate-800 p-5 space-y-2 relative overflow-hidden shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>☀️</span> Mañana
+            </span>
+            {prodManana ? (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Registrado
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800 text-slate-400">
+                Pendiente
+              </span>
+            )}
           </div>
-        )}
+          <p className="text-3xl font-black text-white tracking-tight">
+            {litrosManana.toLocaleString('es-CO', { minimumFractionDigits: 1 })} <span className="text-sm font-semibold text-amber-400">L</span>
+          </p>
+        </div>
+
+        {/* Ordeño Tarde */}
+        <div className="card-dark border-slate-800 p-5 space-y-2 relative overflow-hidden shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>🌙</span> Tarde
+            </span>
+            {prodTarde ? (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Registrado
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800 text-slate-400">
+                Pendiente
+              </span>
+            )}
+          </div>
+          <p className="text-3xl font-black text-white tracking-tight">
+            {litrosTarde.toLocaleString('es-CO', { minimumFractionDigits: 1 })} <span className="text-sm font-semibold text-indigo-400">L</span>
+          </p>
+        </div>
+
+        {/* Total Consolidado */}
+        <div className="bg-gradient-to-br from-blue-950/40 via-slate-900 to-slate-900 border border-blue-500/30 p-5 rounded-2xl space-y-2 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">
+              Total Producción Día
+            </span>
+            <span className="text-lg">🥛</span>
+          </div>
+          <p className="text-3xl font-black text-white tracking-tight">
+            {totalDia.toLocaleString('es-CO', { minimumFractionDigits: 1 })} <span className="text-sm font-semibold text-blue-400">L</span>
+          </p>
+          <p className="text-[11px] text-slate-400">
+            {prodManana && prodTarde ? '✅ Jornadas completas' : '⚠️ Jornada pendiente de completar'}
+          </p>
+        </div>
+
+      </div>
+
+      {/* Historial Completo */}
+      <div className="card-dark border-slate-800 p-6 space-y-4 shadow-xl">
+        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+          Histórico Reciente de Ordeños
+        </h3>
 
         {loading ? (
-          <div className="p-8 text-center text-slate-400">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mb-2"></div>
-            <p className="text-sm">Cargando historial de producciones...</p>
+          <div className="flex flex-col items-center justify-center py-10 gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+            <p className="text-xs text-slate-400">Cargando registros...</p>
           </div>
         ) : producciones.length === 0 ? (
-          <div className="p-8 text-center text-slate-500 space-y-3">
-            <div className="mx-auto w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
-              🥛
-            </div>
-            <p className="text-sm font-medium">Aún no hay registros de producción almacenados.</p>
-            <Link
-              to="/registrar"
-              className="inline-block text-sm font-semibold text-blue-600 hover:underline"
-            >
-              Registrar la primera producción →
-            </Link>
-          </div>
+          <p className="text-xs text-slate-500 text-center py-8">No hay ordeños registrados en el sistema.</p>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {producciones.map((prod) => (
-              <div
-                key={prod.id}
-                className="p-4 sm:px-6 hover:bg-slate-50 transition-colors flex items-center justify-between gap-4"
-              >
+          <div className="divide-y divide-slate-800/80 max-h-96 overflow-y-auto pr-1">
+            {producciones.map((p) => (
+              <div key={p.id} className="py-3.5 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
-                      prod.jornada === 'manana' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
-                    }`}
-                  >
-                    {prod.jornada === 'manana' ? '🌅' : '🌇'}
-                  </div>
+                  <span className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 ${
+                    p.jornada === 'manana'
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+                  }`}>
+                    {p.jornada === 'manana' ? '☀️ Mañana' : '🌙 Tarde'}
+                  </span>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900 text-sm">
-                        {prod.fecha}
-                      </span>
-                      <span
-                        className={`text-xs font-semibold px-2 py-0.5 rounded capitalize ${
-                          prod.jornada === 'manana'
-                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                            : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                        }`}
-                      >
-                        {prod.jornada}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Registrado: {new Date(prod.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    <span className="text-xs font-bold text-white block">{p.fecha}</span>
+                    <span className="text-[10px] text-slate-500">
+                      Registrado: {new Date(p.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-xl font-bold text-slate-900">
-                    {Number(prod.litros).toLocaleString()} L
+                  <span className="text-base font-black text-white">
+                    {Number(p.litros).toLocaleString('es-CO', { minimumFractionDigits: 1 })} L
                   </span>
                 </div>
               </div>
@@ -242,6 +225,7 @@ export default function HistorialProduccion() {
           </div>
         )}
       </div>
+
     </div>
   );
 }

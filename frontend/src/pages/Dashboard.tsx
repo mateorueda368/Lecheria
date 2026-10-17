@@ -286,8 +286,10 @@ export default function Dashboard() {
 
           {/* Fiados Pendientes */}
           <div 
-            onClick={() => navigate('/cobrar-fiado')}
-            className="p-5 rounded-2xl bg-slate-900/90 border border-amber-500/20 hover:border-amber-500/40 cursor-pointer transition-all flex flex-col justify-between gap-4 shadow-lg"
+            onClick={() => isAdmin && navigate('/cobrar-fiado')}
+            className={`p-5 rounded-2xl bg-slate-900/90 border border-amber-500/20 transition-all flex flex-col justify-between gap-4 shadow-lg ${
+              isAdmin ? 'hover:border-amber-500/40 cursor-pointer' : ''
+            }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-slate-300 uppercase tracking-wider">Cuentas Fiadas Pendientes</span>
@@ -299,7 +301,7 @@ export default function Dashboard() {
               </p>
               <div className="flex items-center justify-between mt-1">
                 <span className="text-xs text-slate-400 font-medium">Por cobrar a clientes</span>
-                <span className="text-[11px] font-bold text-amber-400 hover:underline">Cobrar →</span>
+                {isAdmin && <span className="text-[11px] font-bold text-amber-400 hover:underline">Cobrar →</span>}
               </div>
             </div>
           </div>
@@ -374,15 +376,17 @@ export default function Dashboard() {
             </button>
           )}
 
-          <button
-            onClick={() => navigate('/correcciones')}
-            className="p-3.5 rounded-xl bg-slate-900 border border-rose-500/30 hover:border-rose-500/60 hover:bg-rose-950/20 transition-all flex flex-col items-center gap-2 text-center group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-              ✏️
-            </div>
-            <span className="text-xs font-bold text-slate-200">Correcciones</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/correcciones')}
+              className="p-3.5 rounded-xl bg-slate-900 border border-rose-500/30 hover:border-rose-500/60 hover:bg-rose-950/20 transition-all flex flex-col items-center gap-2 text-center group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                ✏️
+              </div>
+              <span className="text-xs font-bold text-slate-200">Correcciones</span>
+            </button>
+          )}
 
         </div>
       </section>

@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.movimientos_leche (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     fecha date NOT NULL,
     tipo text NOT NULL CONSTRAINT movimientos_leche_tipo_chk CHECK (tipo IN ('produccion', 'venta_cobrada', 'venta_fiada', 'consumo', 'entrega_quesera', 'correccion')),
-    litros numeric(10,2) NOT NULL CONSTRAINT movimientos_leche_litros_chk CHECK (litros > 0),
+    litros numeric(10,2) NOT NULL CONSTRAINT movimientos_leche_litros_chk CHECK (litros > 0 OR tipo = 'correccion'),
     produccion_id uuid REFERENCES public.producciones_leche(id),
     concepto text,
     registrado_por uuid NOT NULL REFERENCES public.profiles(id),
@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS public.movimientos_leche (
 );
 
 ALTER TABLE public.movimientos_leche ADD COLUMN IF NOT EXISTS concepto text;
+ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_litros_chk;
+ALTER TABLE public.movimientos_leche ADD CONSTRAINT movimientos_leche_litros_chk CHECK (litros > 0 OR tipo = 'correccion');
 
 -- Catálogo de clientes fiadores
 CREATE TABLE IF NOT EXISTS public.clientes (
@@ -86,13 +88,16 @@ CREATE TABLE IF NOT EXISTS public.entregas_quesera (
 CREATE TABLE IF NOT EXISTS public.movimientos_caja (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     fecha date NOT NULL,
-    tipo text NOT NULL CONSTRAINT movimientos_caja_tipo_chk CHECK (tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera', 'egreso_flete', 'retiro')),
+    tipo text NOT NULL CONSTRAINT movimientos_caja_tipo_chk CHECK (tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera', 'egreso_flete', 'retiro', 'correccion')),
     monto numeric(10,2) NOT NULL CONSTRAINT movimientos_caja_monto_chk CHECK (monto != 0),
     concepto text,
     venta_id uuid REFERENCES public.ventas_directas(id),
     registrado_por uuid NOT NULL REFERENCES public.profiles(id),
     created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.movimientos_caja DROP CONSTRAINT IF EXISTS movimientos_caja_tipo_chk;
+ALTER TABLE public.movimientos_caja ADD CONSTRAINT movimientos_caja_tipo_chk CHECK (tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera', 'egreso_flete', 'retiro', 'correccion'));
 
 -- Pagos y abonos de clientes fiados
 CREATE TABLE IF NOT EXISTS public.pagos_clientes (
@@ -180,12 +185,12 @@ USING (id = auth.uid() OR public.is_admin());
 DROP POLICY IF EXISTS producciones_select ON public.producciones_leche;
 DROP POLICY IF EXISTS producciones_select_own_or_admin ON public.producciones_leche;
 CREATE POLICY producciones_select ON public.producciones_leche FOR SELECT TO authenticated
-USING (registrado_por = auth.uid() OR public.is_admin());
+USING (true);
 
 DROP POLICY IF EXISTS movimientos_select ON public.movimientos_leche;
 DROP POLICY IF EXISTS movimientos_select_own_or_admin ON public.movimientos_leche;
 CREATE POLICY movimientos_select ON public.movimientos_leche FOR SELECT TO authenticated
-USING (registrado_por = auth.uid() OR public.is_admin());
+USING (true);
 
 DROP POLICY IF EXISTS clientes_select ON public.clientes;
 DROP POLICY IF EXISTS clientes_insert ON public.clientes;
@@ -614,6 +619,7 @@ RETURNS TABLE (
     pago_id uuid,
     fecha date,
     monto numeric(10,2),
+    saldo_restante numeric(10,2),
     caja_movimiento_id uuid
 )
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp
@@ -623,23 +629,63 @@ DECLARE
     v_rol text;
     v_pago_id uuid;
     v_caja_id uuid;
+    v_total_pendiente numeric(10,2);
+    v_nuevo_saldo numeric(10,2);
+    r RECORD;
+    v_monto_restante numeric(10,2);
 BEGIN
     IF v_usuario IS NULL THEN RAISE EXCEPTION 'Usuario no autenticado'; END IF;
     SELECT p.rol INTO v_rol FROM public.profiles p WHERE p.id = v_usuario;
     IF NOT FOUND THEN RAISE EXCEPTION 'Perfil no encontrado'; END IF;
 
     IF v_rol NOT IN ('administrador') THEN RAISE EXCEPTION 'Solo el administrador puede registrar pagos de quesera'; END IF;
-    IF p_monto IS NULL OR p_monto <= 0 THEN RAISE EXCEPTION 'Monto debe ser > 0'; END IF;
+    IF p_fecha IS NULL THEN RAISE EXCEPTION 'La fecha es obligatoria'; END IF;
+    IF p_monto IS NULL OR p_monto <= 0 THEN RAISE EXCEPTION 'El monto abonado debe ser mayor a cero'; END IF;
+
+    -- Calcular saldo pendiente de entregas
+    SELECT COALESCE(SUM(eq.total), 0) INTO v_total_pendiente
+    FROM public.entregas_quesera eq
+    WHERE eq.estado = 'pendiente';
+
+    IF v_total_pendiente <= 0 THEN
+        RAISE EXCEPTION 'No existen entregas a la quesera pendientes de pago';
+    END IF;
+
+    IF p_monto > v_total_pendiente THEN
+        RAISE EXCEPTION 'El monto cobrado ($%) es superior al acumulado pendiente de la quesera ($%)', p_monto, v_total_pendiente;
+    END IF;
+
+    v_nuevo_saldo := v_total_pendiente - p_monto;
 
     INSERT INTO public.pagos_quesera (fecha, monto, concepto, registrado_por)
-    VALUES (p_fecha, p_monto, COALESCE(p_concepto, 'Pago de liquidacion recibida de la quesera'), v_usuario)
+    VALUES (p_fecha, p_monto, COALESCE(p_concepto, 'Cobro de liquidación recibida de quesera'), v_usuario)
     RETURNING id INTO v_pago_id;
 
     INSERT INTO public.movimientos_caja (fecha, tipo, monto, concepto, registrado_por)
-    VALUES (p_fecha, 'pago_quesera', p_monto, 'Pago recibido de la quesera', v_usuario)
+    VALUES (p_fecha, 'pago_quesera', p_monto, 'Pago recibido de la quesera en efectivo', v_usuario)
     RETURNING id INTO v_caja_id;
 
-    RETURN QUERY SELECT v_pago_id, p_fecha, p_monto, v_caja_id;
+    -- Marcar entregas completadas bajo modelo FIFO
+    v_monto_restante := p_monto;
+    FOR r IN 
+        SELECT id, total FROM public.entregas_quesera 
+        WHERE estado = 'pendiente' 
+        ORDER BY fecha ASC, created_at ASC 
+    LOOP
+        IF v_monto_restante >= r.total THEN
+            UPDATE public.entregas_quesera SET estado = 'pagada' WHERE id = r.id;
+            v_monto_restante := v_monto_restante - r.total;
+        ELSE
+            EXIT;
+        END IF;
+    END LOOP;
+
+    -- Si se liquidó por completo el saldo pendiente, asegurar que todas queden en 'pagada'
+    IF v_nuevo_saldo = 0 THEN
+        UPDATE public.entregas_quesera SET estado = 'pagada' WHERE estado = 'pendiente';
+    END IF;
+
+    RETURN QUERY SELECT v_pago_id, p_fecha, p_monto, v_nuevo_saldo, v_caja_id;
 END;
 $$;
 REVOKE ALL ON FUNCTION public.registrar_pago_quesera(date, numeric, text) FROM PUBLIC, anon;
@@ -729,16 +775,17 @@ BEGIN
     FROM public.cierres_caja cc ORDER BY cc.created_at DESC LIMIT 1;
     v_base_anterior := COALESCE(v_base_anterior, 0);
 
+    -- Ingresos directos + correcciones positivas a caja
     SELECT COALESCE(SUM(mc.monto), 0) INTO v_ingresos
     FROM public.movimientos_caja mc
-    WHERE mc.tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera')
+    WHERE (mc.tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera') OR (mc.tipo = 'correccion' AND mc.monto > 0))
       AND (v_ultimo_cierre_ts IS NULL OR mc.created_at > v_ultimo_cierre_ts);
 
-    -- Excluir retiros automáticos generados por cierres previos para no duplicar el descuento de excedente
-    SELECT COALESCE(SUM(mc.monto), 0) INTO v_egresos
+    -- Egresos normales + correcciones negativas a caja (excluyendo retiro automático de cierre previo)
+    SELECT COALESCE(SUM(ABS(mc.monto)), 0) INTO v_egresos
     FROM public.movimientos_caja mc
-    WHERE mc.tipo IN ('egreso_flete', 'retiro')
-      AND (mc.concepto IS NULL OR mc.concepto NOT LIKE '%cierre de caja%')
+    WHERE ((mc.tipo IN ('egreso_flete', 'retiro') AND (mc.concepto IS NULL OR mc.concepto NOT LIKE '%cierre de caja%'))
+           OR (mc.tipo = 'correccion' AND mc.monto < 0))
       AND (v_ultimo_cierre_ts IS NULL OR mc.created_at > v_ultimo_cierre_ts);
 
     v_caja_esperada := v_base_anterior + v_ingresos - v_egresos;
@@ -770,10 +817,10 @@ DROP FUNCTION IF EXISTS public.registrar_correccion(date, text, uuid, numeric, n
 CREATE OR REPLACE FUNCTION public.registrar_correccion(
     p_fecha date,
     p_modulo text,
-    p_registro_id uuid,
-    p_litros_diferencia numeric(10,2),
-    p_monto_diferencia numeric(10,2),
-    p_motivo text
+    p_registro_id uuid DEFAULT NULL,
+    p_litros_diferencia numeric(10,2) DEFAULT 0.00,
+    p_monto_diferencia numeric(10,2) DEFAULT 0.00,
+    p_motivo text DEFAULT NULL
 )
 RETURNS TABLE (
     correccion_id uuid,
@@ -795,14 +842,36 @@ BEGIN
     SELECT p.rol INTO v_rol FROM public.profiles p WHERE p.id = v_usuario;
     IF NOT FOUND THEN RAISE EXCEPTION 'Perfil no encontrado'; END IF;
 
+    IF p_fecha IS NULL THEN RAISE EXCEPTION 'La fecha es obligatoria'; END IF;
     IF p_modulo NOT IN ('produccion', 'venta', 'consumo', 'quesera', 'caja') THEN RAISE EXCEPTION 'Modulo de corrección inválido'; END IF;
     IF p_motivo IS NULL OR length(trim(p_motivo)) = 0 THEN RAISE EXCEPTION 'El motivo es obligatorio para garantizar trazabilidad'; END IF;
 
+    IF COALESCE(p_litros_diferencia, 0) = 0 AND COALESCE(p_monto_diferencia, 0) = 0 THEN
+        RAISE EXCEPTION 'Debe especificar una diferencia en litros o en dinero mayor/menor a cero';
+    END IF;
+
+    -- Corrección financiera en caja reservada a administradores
+    IF COALESCE(p_monto_diferencia, 0) != 0 AND v_rol != 'administrador' THEN
+        RAISE EXCEPTION 'Solo el administrador puede registrar correcciones financieras';
+    END IF;
+
     INSERT INTO public.correcciones (fecha, modulo, registro_id, litros_diferencia, monto_diferencia, motivo, corregido_por)
-    VALUES (p_fecha, p_modulo, p_registro_id, COALESCE(p_litros_diferencia, 0.00), COALESCE(p_monto_diferencia, 0.00), p_motivo, v_usuario)
+    VALUES (p_fecha, p_modulo, p_registro_id, COALESCE(p_litros_diferencia, 0.00), COALESCE(p_monto_diferencia, 0.00), trim(p_motivo), v_usuario)
     RETURNING id INTO v_correccion_id;
 
-    RETURN QUERY SELECT v_correccion_id, p_fecha, p_modulo, p_registro_id, COALESCE(p_litros_diferencia, 0.00), COALESCE(p_monto_diferencia, 0.00), p_motivo;
+    -- Movimiento compensatorio de leche si aplica
+    IF COALESCE(p_litros_diferencia, 0) != 0 THEN
+        INSERT INTO public.movimientos_leche (fecha, tipo, litros, concepto, registrado_por)
+        VALUES (p_fecha, 'correccion', p_litros_diferencia, 'Corrección (' || p_modulo || '): ' || trim(p_motivo), v_usuario);
+    END IF;
+
+    -- Movimiento compensatorio de caja si aplica
+    IF COALESCE(p_monto_diferencia, 0) != 0 THEN
+        INSERT INTO public.movimientos_caja (fecha, tipo, monto, concepto, registrado_por)
+        VALUES (p_fecha, 'correccion', p_monto_diferencia, 'Corrección (' || p_modulo || '): ' || trim(p_motivo), v_usuario);
+    END IF;
+
+    RETURN QUERY SELECT v_correccion_id, p_fecha, p_modulo, p_registro_id, COALESCE(p_litros_diferencia, 0.00), COALESCE(p_monto_diferencia, 0.00), trim(p_motivo);
 END;
 $$;
 REVOKE ALL ON FUNCTION public.registrar_correccion(date, text, uuid, numeric, numeric, text) FROM PUBLIC, anon;
@@ -831,7 +900,16 @@ DECLARE
   v_ultimo_cierre_ts      TIMESTAMPTZ;
   v_movimientos_recientes JSONB;
 BEGIN
-  SELECT COALESCE(SUM(CASE WHEN tipo = 'produccion' THEN litros ELSE -litros END), 0) INTO v_stock_leche FROM public.movimientos_leche;
+  -- 1. Stock de leche considerando correcciones
+  SELECT COALESCE(
+    SUM(
+      CASE 
+        WHEN tipo = 'produccion' THEN litros 
+        WHEN tipo = 'correccion' THEN litros 
+        ELSE -litros 
+      END
+    ), 0
+  ) INTO v_stock_leche FROM public.movimientos_leche;
 
   SELECT COALESCE(SUM(pl.litros), 0),
          COALESCE(SUM(pl.litros) FILTER (WHERE pl.jornada = 'manana'), 0),
@@ -843,14 +921,15 @@ BEGIN
   INTO v_ultimo_cierre_fecha, v_ultimo_cierre_monto, v_ultimo_cierre_ts
   FROM public.cierres_caja cc ORDER BY cc.created_at DESC LIMIT 1;
 
+  -- Ingresos + correcciones positivas a caja desde el último cierre
   SELECT COALESCE(SUM(mc.monto), 0) INTO v_ingresos_caja FROM public.movimientos_caja mc
-  WHERE mc.tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera')
+  WHERE (mc.tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera') OR (mc.tipo = 'correccion' AND mc.monto > 0))
     AND (v_ultimo_cierre_ts IS NULL OR mc.created_at > v_ultimo_cierre_ts);
 
-  -- Excluir retiros automáticos por cierre de caja para evitar restar dos veces el excedente
-  SELECT COALESCE(SUM(mc.monto), 0) INTO v_egresos_caja FROM public.movimientos_caja mc
-  WHERE mc.tipo IN ('egreso_flete', 'retiro')
-    AND (mc.concepto IS NULL OR mc.concepto NOT LIKE '%cierre de caja%')
+  -- Egresos + correcciones negativas a caja desde el último cierre
+  SELECT COALESCE(SUM(ABS(mc.monto)), 0) INTO v_egresos_caja FROM public.movimientos_caja mc
+  WHERE ((mc.tipo IN ('egreso_flete', 'retiro') AND (mc.concepto IS NULL OR mc.concepto NOT LIKE '%cierre de caja%'))
+         OR (mc.tipo = 'correccion' AND mc.monto < 0))
     AND (v_ultimo_cierre_ts IS NULL OR mc.created_at > v_ultimo_cierre_ts);
 
   v_caja_esperada := COALESCE(v_ultimo_cierre_monto, 0) + v_ingresos_caja - v_egresos_caja;

@@ -37,13 +37,13 @@ export default function Layout() {
   ];
 
   const adminNavItems = [
-    { to: '/cobrar-fiado', label: 'Cobrar Fiado', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2' },
-    { to: '/clientes', label: 'Clientes & Saldos', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7' },
-    { to: '/liquidacion-quesera', label: 'Liquidaciones Quesera', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01' },
-    { to: '/egresos', label: 'Registrar Egreso', icon: 'M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z' },
-    { to: '/cierre-caja', label: 'Cierre de Caja', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6' },
-    { to: '/historial-caja', label: 'Historial Caja', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10' },
-    { to: '/correcciones', label: 'Correcciones Trazables', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11' },
+    { to: '/cobrar-fiado', label: 'Cobrar Fiado', short: 'Cobrar', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2' },
+    { to: '/clientes', label: 'Clientes & Saldos', short: 'Clientes', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7' },
+    { to: '/liquidacion-quesera', label: 'Liquidaciones Quesera', short: 'Liquidaciones', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01' },
+    { to: '/egresos', label: 'Registrar Egreso', short: 'Egresos', icon: 'M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z' },
+    { to: '/cierre-caja', label: 'Cierre de Caja', short: 'Cierre', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6' },
+    { to: '/historial-caja', label: 'Historial Caja', short: 'Hist. Caja', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10' },
+    { to: '/correcciones', label: 'Correcciones Trazables', short: 'Correcciones', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11' },
   ];
 
   return (
@@ -142,40 +142,19 @@ export default function Layout() {
                 Quesera
               </NavLink>
 
-              {isAdmin && (
-                <>
-                  <NavLink
-                    to="/cobrar-fiado"
-                    className={({ isActive }) =>
-                      `px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                        isActive ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'text-indigo-300 hover:text-white hover:bg-indigo-950/40'
-                      }`
-                    }
-                  >
-                    Cobrar Fiado
-                  </NavLink>
-                  <NavLink
-                    to="/liquidacion-quesera"
-                    className={({ isActive }) =>
-                      `px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                        isActive ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'text-indigo-300 hover:text-white hover:bg-indigo-950/40'
-                      }`
-                    }
-                  >
-                    Liquidaciones
-                  </NavLink>
-                  <NavLink
-                    to="/cierre-caja"
-                    className={({ isActive }) =>
-                      `px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                        isActive ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'text-indigo-300 hover:text-white hover:bg-indigo-950/40'
-                      }`
-                    }
-                  >
-                    Cierre Caja
-                  </NavLink>
-                </>
-              )}
+              {isAdmin && adminNavItems.map(item => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                      isActive ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'text-indigo-300 hover:text-white hover:bg-indigo-950/40'
+                    }`
+                  }
+                >
+                  {item.short}
+                </NavLink>
+              ))}
             </nav>
 
             {/* User & Role Badge & Actions */}
@@ -271,30 +250,32 @@ export default function Layout() {
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-[10px] font-black uppercase text-indigo-400 tracking-wider mb-2">Administración & Caja</p>
-                  <div className="space-y-1">
-                    {adminNavItems.map(item => (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className={({ isActive }) =>
-                          `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                            isActive
-                              ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                          }`
-                        }
-                      >
-                        <svg className="w-4 h-4 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                        </svg>
-                        {item.label}
-                      </NavLink>
-                    ))}
+                {isAdmin && (
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-indigo-400 tracking-wider mb-2">Administración & Caja</p>
+                    <div className="space-y-1">
+                      {adminNavItems.map(item => (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={({ isActive }) =>
+                            `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                              isActive
+                                ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                            }`
+                          }
+                        >
+                          <svg className="w-4 h-4 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+                          </svg>
+                          {item.label}
+                        </NavLink>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 // --- Types ---
@@ -36,7 +36,6 @@ interface DetalleCliente {
   pagos: PagoCliente[];
 }
 
-// --- Helpers ---
 const fmtCOP = (n: number) =>
   '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -51,6 +50,7 @@ export default function EstadoClientes() {
   const [clientes, setClientes] = useState<ClienteSaldo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState('');
 
   // Detalle del cliente seleccionado
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -150,194 +150,243 @@ export default function EstadoClientes() {
     }
   };
 
+  const clientesFiltrados = clientes.filter(
+    (c) =>
+      c.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+      (c.telefono && c.telefono.includes(busqueda))
+  );
+
   // Totales globales
   const totalDeuda = clientes.reduce((acc, c) => acc + c.saldoPendiente, 0);
   const clientesConDeuda = clientes.filter((c) => c.saldoPendiente > 0).length;
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-500 font-medium">Cargando clientes...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-16">
-        <p className="text-rose-600 font-semibold">⚠️ {error}</p>
-        <button onClick={fetchClientes} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">
-          Reintentar
-        </button>
-      </div>
-    );
-  }
+  const mayorDeudor = clientes[0]?.saldoPendiente > 0 ? clientes[0] : null;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in">
+      
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-slate-100">
+      <div className="pb-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Estado de Clientes</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Saldos de fiados y historial de pagos por cliente.
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-amber-500/10 text-amber-400 text-lg">👥</span>
+            <h1 className="text-2xl font-black text-white tracking-tight">Estado de Clientes y Fiados</h1>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            Control de cuentas por cobrar, historial de compras fiadas y registros de abonos por cliente.
           </p>
         </div>
-        <button
-          onClick={() => navigate('/fiados')}
-          className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
-        >
-          + Nueva Venta Fiada
-        </button>
-      </div>
 
-      {/* Resumen global */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Clientes</p>
-          <p className="text-2xl font-black text-slate-800">{clientes.length}</p>
-        </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-          <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">Con Deuda</p>
-          <p className="text-2xl font-black text-amber-800">{clientesConDeuda}</p>
-        </div>
-        <div className="col-span-2 sm:col-span-1 bg-rose-50 border border-rose-200 rounded-xl p-4 text-center">
-          <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">Deuda Total</p>
-          <p className="text-2xl font-black text-rose-800">{fmtCOP(totalDeuda)}</p>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/fiados"
+            className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-all"
+          >
+            + Venta Fiada
+          </Link>
+          <Link
+            to="/cobrar-fiado"
+            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20"
+          >
+            Cobrar Abono →
+          </Link>
         </div>
       </div>
 
-      {/* Lista de clientes */}
-      {clientes.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
-          <p className="text-4xl mb-3">👥</p>
-          <p className="font-medium">No hay clientes registrados aún.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {clientes.map((cliente) => {
-            const isOpen = selectedId === cliente.id;
-            const tieneDeuda = cliente.saldoPendiente > 0;
-
-            return (
-              <div
-                key={cliente.id}
-                className={`rounded-xl border transition-all ${
-                  isOpen ? 'border-blue-300 shadow-md' : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                {/* Fila principal — clic para expandir */}
-                <button
-                  onClick={() => handleSelectCliente(cliente.id)}
-                  className="w-full flex items-center justify-between px-4 py-4 text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
-                      tieneDeuda ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
-                    }`}>
-                      {cliente.nombre.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-800 text-sm">{cliente.nombre}</p>
-                      {cliente.telefono && (
-                        <p className="text-xs text-slate-400">{cliente.telefono}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block">
-                      <p className="text-xs text-slate-400">Fiado total</p>
-                      <p className="text-sm font-semibold text-slate-600">{fmtCOP(cliente.totalFiado)}</p>
-                    </div>
-                    <div className="text-right hidden sm:block">
-                      <p className="text-xs text-slate-400">Pagado</p>
-                      <p className="text-sm font-semibold text-emerald-600">{fmtCOP(cliente.totalPagado)}</p>
-                    </div>
-                    <div className="text-right min-w-[90px]">
-                      <p className="text-xs text-slate-400">Saldo</p>
-                      <p className={`text-base font-black ${tieneDeuda ? 'text-rose-700' : 'text-emerald-700'}`}>
-                        {tieneDeuda ? fmtCOP(cliente.saldoPendiente) : '✅ Al día'}
-                      </p>
-                    </div>
-                    <svg
-                      className={`w-4 h-4 text-slate-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Detalle expandible */}
-                {isOpen && (
-                  <div className="border-t border-slate-100 px-4 pb-4 pt-3 bg-slate-50 rounded-b-xl">
-                    {loadingDetalle ? (
-                      <div className="flex items-center gap-2 py-4 text-slate-400 text-sm">
-                        <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                        Cargando historial...
-                      </div>
-                    ) : detalle ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Ventas fiadas */}
-                        <div>
-                          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                            📋 Ventas Fiadas ({detalle.ventas.length})
-                          </h3>
-                          {detalle.ventas.length === 0 ? (
-                            <p className="text-sm text-slate-400 italic">Sin ventas fiadas.</p>
-                          ) : (
-                            <div className="flex flex-col gap-1.5">
-                              {detalle.ventas.map((v) => (
-                                <div key={v.id} className="flex justify-between items-center bg-white rounded-lg px-3 py-2 border border-slate-200 text-sm">
-                                  <span className="text-slate-500">{fmtFecha(v.fecha)} · {v.jornada === 'manana' ? '☀️' : '🌙'} {v.litros}L</span>
-                                  <span className="font-semibold text-rose-700">{fmtCOP(v.total)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Pagos recibidos */}
-                        <div>
-                          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                            ✅ Pagos Recibidos ({detalle.pagos.length})
-                          </h3>
-                          {detalle.pagos.length === 0 ? (
-                            <p className="text-sm text-slate-400 italic">Sin pagos registrados.</p>
-                          ) : (
-                            <div className="flex flex-col gap-1.5">
-                              {detalle.pagos.map((p) => (
-                                <div key={p.id} className="flex justify-between items-center bg-white rounded-lg px-3 py-2 border border-slate-200 text-sm">
-                                  <span className="text-slate-500">{fmtFecha(p.fecha)}{p.concepto ? ` · ${p.concepto}` : ''}</span>
-                                  <span className="font-semibold text-emerald-700">{fmtCOP(p.monto)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Acciones */}
-                        {tieneDeuda && (
-                          <div className="sm:col-span-2 pt-2 flex justify-end">
-                            <button
-                              onClick={() => navigate('/cobrar-fiado')}
-                              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors"
-                            >
-                              💰 Registrar Cobro
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+          ⚠️ {error}
         </div>
       )}
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        
+        {/* Cartera Total */}
+        <div className="bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-900 p-5 rounded-2xl border border-amber-500/30 shadow-xl space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Cartera Total Pendiente</span>
+            <span className="text-base font-black text-amber-400">📋</span>
+          </div>
+          <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            {fmtCOP(totalDeuda)} <span className="text-xs font-semibold text-amber-400">COP</span>
+          </p>
+          <p className="text-[11px] text-slate-400">{clientesConDeuda} clientes con saldo pendiente</p>
+        </div>
+
+        {/* Clientes Registrados */}
+        <div className="card-dark border-slate-800 p-5 space-y-1 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Clientes en Catálogo</span>
+            <span className="text-base font-black text-slate-400">👥</span>
+          </div>
+          <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            {clientes.length} <span className="text-xs font-semibold text-slate-400">Clientes</span>
+          </p>
+          <p className="text-[11px] text-slate-500">{clientes.length - clientesConDeuda} clientes con saldo en $0</p>
+        </div>
+
+        {/* Mayor Deudor */}
+        <div className="card-dark border-slate-800 p-5 space-y-1 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">Mayor Deuda Actual</span>
+            <span className="text-base font-black text-rose-400">⚠️</span>
+          </div>
+          <p className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">
+            {mayorDeudor ? mayorDeudor.nombre : 'Ninguno'}
+          </p>
+          <p className="text-xs font-bold text-rose-400">
+            {mayorDeudor ? `${fmtCOP(mayorDeudor.saldoPendiente)} COP` : 'Sin deudas'}
+          </p>
+        </div>
+
+      </div>
+
+      {/* Buscador */}
+      <div className="card-dark border-slate-800 p-4 shadow-xl">
+        <input
+          type="text"
+          placeholder="🔍 Buscar cliente por nombre o teléfono..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="w-full px-4 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition-all font-medium"
+        />
+      </div>
+
+      {/* Listado de Clientes */}
+      <div className="card-dark border-slate-800 p-6 space-y-4 shadow-xl">
+        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+          Clientes Registrados ({clientesFiltrados.length})
+        </h3>
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+            <p className="text-xs text-slate-400">Cargando cuentas de clientes...</p>
+          </div>
+        ) : clientesFiltrados.length === 0 ? (
+          <p className="text-xs text-slate-500 text-center py-8">
+            No se encontraron clientes que coincidan con la búsqueda.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-800/80">
+            {clientesFiltrados.map((c) => {
+              const isSelected = selectedId === c.id;
+              const conDeuda = c.saldoPendiente > 0;
+
+              return (
+                <div key={c.id} className="py-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 ${
+                        conDeuda ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      }`}>
+                        {c.nombre.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">{c.nombre}</h4>
+                        <span className="text-[11px] text-slate-500">
+                          {c.telefono ? `📞 ${c.telefono}` : 'Sin teléfono'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-4 pl-13 sm:pl-0">
+                      <div className="text-right">
+                        <span className={`text-base font-black tracking-tight ${conDeuda ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {fmtCOP(c.saldoPendiente)} COP
+                        </span>
+                        <span className="text-[10px] text-slate-500 block">
+                          Total fiado: {fmtCOP(c.totalFiado)} | Pagado: {fmtCOP(c.totalPagado)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {conDeuda && (
+                          <button
+                            type="button"
+                            onClick={() => navigate('/cobrar-fiado')}
+                            className="px-3 py-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white text-[11px] font-bold transition-all"
+                          >
+                            Cobrar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleSelectCliente(c.id)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition-all"
+                        >
+                          {isSelected ? 'Cerrar ▲' : 'Detalle ▼'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Panel Desplegable de Detalle (Ventas y Pagos) */}
+                  {isSelected && (
+                    <div className="mt-3 p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-4 animate-fade-in">
+                      {loadingDetalle ? (
+                        <div className="py-4 text-center text-xs text-slate-400">
+                          Cargando movimientos de {c.nombre}...
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          
+                          {/* Ventas Fiadas */}
+                          <div className="space-y-2">
+                            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+                              Ventas a Crédito ({detalle?.ventas.length ?? 0})
+                            </span>
+                            {(detalle?.ventas.length ?? 0) === 0 ? (
+                              <p className="text-[11px] text-slate-500">Sin ventas fiadas registradas.</p>
+                            ) : (
+                              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                {detalle?.ventas.map((v) => (
+                                  <div key={v.id} className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                                    <span className="text-slate-300 font-medium">{fmtFecha(v.fecha)} ({v.jornada === 'manana' ? '☀️' : '🌙'})</span>
+                                    <div className="text-right">
+                                      <span className="text-amber-400 font-bold block">{fmtCOP(Number(v.total))}</span>
+                                      <span className="text-[10px] text-slate-500">{Number(v.litros)} L</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Pagos Realizados */}
+                          <div className="space-y-2">
+                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
+                              Abonos y Pagos ({detalle?.pagos.length ?? 0})
+                            </span>
+                            {(detalle?.pagos.length ?? 0) === 0 ? (
+                              <p className="text-[11px] text-slate-500">Sin pagos registrados aún.</p>
+                            ) : (
+                              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                {detalle?.pagos.map((p) => (
+                                  <div key={p.id} className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                                    <div>
+                                      <span className="text-slate-300 font-medium block">{fmtFecha(p.fecha)}</span>
+                                      <span className="text-[10px] text-slate-500">{p.concepto || 'Abono'}</span>
+                                    </div>
+                                    <span className="text-emerald-400 font-bold">{fmtCOP(Number(p.monto))}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }

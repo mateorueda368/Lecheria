@@ -77,17 +77,17 @@ BEGIN
 
     v_base_anterior := COALESCE(v_base_anterior, 0);
 
-    -- 2. Calcular ingresos de caja desde el último cierre
+    -- 2. Calcular ingresos de caja desde el último cierre (incluyendo correcciones positivas)
     SELECT COALESCE(SUM(mc.monto), 0) INTO v_ingresos
     FROM public.movimientos_caja AS mc
-    WHERE mc.tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera')
+    WHERE (mc.tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera') OR (mc.tipo = 'correccion' AND mc.monto > 0))
       AND (v_ultimo_cierre_ts IS NULL OR mc.created_at > v_ultimo_cierre_ts);
 
-    -- 3. Calcular egresos de caja desde el último cierre (excluyendo el retiro de ajuste por cierre anterior)
-    SELECT COALESCE(SUM(mc.monto), 0) INTO v_egresos
+    -- 3. Calcular egresos de caja desde el último cierre (incluyendo correcciones negativas y excluyendo retiro por cierre)
+    SELECT COALESCE(SUM(ABS(mc.monto)), 0) INTO v_egresos
     FROM public.movimientos_caja AS mc
-    WHERE mc.tipo IN ('egreso_flete', 'retiro')
-      AND (mc.concepto IS NULL OR mc.concepto NOT LIKE '%cierre de caja%')
+    WHERE ((mc.tipo IN ('egreso_flete', 'retiro') AND (mc.concepto IS NULL OR mc.concepto NOT LIKE '%cierre de caja%'))
+           OR (mc.tipo = 'correccion' AND mc.monto < 0))
       AND (v_ultimo_cierre_ts IS NULL OR mc.created_at > v_ultimo_cierre_ts);
 
     -- 4. Calcular caja esperada y diferencia

@@ -11,6 +11,11 @@ ALTER TABLE public.movimientos_caja DROP CONSTRAINT IF EXISTS movimientos_caja_t
 ALTER TABLE public.movimientos_caja ADD CONSTRAINT movimientos_caja_tipo_chk 
     CHECK (tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera', 'egreso_flete', 'retiro', 'correccion'));
 
+ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_litros_chk;
+ALTER TABLE public.movimientos_leche ADD CONSTRAINT movimientos_leche_litros_chk 
+    CHECK (litros > 0 OR tipo = 'correccion');
+ALTER TABLE public.movimientos_leche ADD COLUMN IF NOT EXISTS concepto text;
+
 CREATE OR REPLACE FUNCTION public.registrar_correccion(
     p_fecha date,
     p_modulo text,
@@ -23,8 +28,10 @@ RETURNS TABLE (
     correccion_id uuid,
     fecha date,
     modulo text,
+    registro_id uuid,
     litros_diferencia numeric(10,2),
-    monto_diferencia numeric(10,2)
+    monto_diferencia numeric(10,2),
+    motivo text
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -96,11 +103,13 @@ BEGIN
             fecha,
             tipo,
             litros,
+            concepto,
             registrado_por
         ) VALUES (
             p_fecha,
             'correccion',
             p_litros_diferencia,
+            'Corrección (' || p_modulo || '): ' || trim(p_motivo),
             v_usuario
         );
     END IF;
@@ -127,8 +136,10 @@ BEGIN
         v_correccion_id,
         p_fecha,
         p_modulo,
+        p_registro_id,
         COALESCE(p_litros_diferencia, 0.00),
-        COALESCE(p_monto_diferencia, 0.00);
+        COALESCE(p_monto_diferencia, 0.00),
+        trim(p_motivo);
 END;
 $$;
 

@@ -85,6 +85,7 @@ export default function RegistrarCorreccion() {
       const { error } = await supabase.rpc('registrar_correccion', {
         p_fecha: fecha,
         p_modulo: modulo,
+        p_registro_id: null,
         p_litros_diferencia: litrosNum,
         p_monto_diferencia: montoNum,
         p_motivo: motivo.trim(),

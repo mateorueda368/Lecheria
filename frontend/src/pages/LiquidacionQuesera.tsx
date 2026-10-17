@@ -1,5 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../auth/AuthContext';
 
 interface EntregaQuesera {
   id: string;
@@ -12,6 +14,8 @@ interface EntregaQuesera {
 }
 
 export default function LiquidacionQuesera() {
+  const { profile } = useAuth();
+  const isAdmin = profile?.rol === 'administrador';
   const today = new Date().toISOString().split('T')[0];
 
   const [fecha, setFecha] = useState(today);
@@ -49,9 +53,18 @@ export default function LiquidacionQuesera() {
   const totalMontoPendiente = entregasPendientes.reduce((acc, item) => acc + Number(item.total), 0);
   const montoNum = parseFloat(montoCobro) || 0;
 
+  const handleCobrarTodo = () => {
+    setMontoCobro(totalMontoPendiente.toString());
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setMensaje(null);
+
+    if (!isAdmin) {
+      setMensaje({ type: 'error', text: 'Solo administradores pueden registrar cobros de liquidación a la quesera.' });
+      return;
+    }
 
     if (montoNum <= 0) {
       setMensaje({ type: 'error', text: 'Por favor ingresa un monto válido mayor a cero.' });
@@ -80,13 +93,13 @@ export default function LiquidacionQuesera() {
       } else {
         setMensaje({
           type: 'success',
-          text: `¡Liquidación Cobrada! Se ingresaron $${montoNum.toLocaleString()} COP a la caja física.`,
+          text: `¡Liquidación Cobrada! Se ingresaron $${montoNum.toLocaleString('es-CO')} COP en efectivo a la caja física.`,
         });
         setMontoCobro('');
         setConcepto('');
         fetchEntregas();
       }
-    } catch (err: any) {
+    } catch {
       setMensaje({ type: 'error', text: 'Error inesperado de red o servidor.' });
     } finally {
       setSaving(false);
@@ -94,179 +107,226 @@ export default function LiquidacionQuesera() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 fade-in">
+    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+      
       {/* Header */}
-      <div className="pb-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="pb-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Liquidación y Pago de Quesera</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Consulta el saldo acumulado a $1.950/L y registra los cobros recibidos.
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-teal-500/10 text-teal-400 text-lg">💰</span>
+            <h1 className="text-2xl font-black text-white tracking-tight">Liquidación de Quesera (Cobro)</h1>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            Registra el desembolso periódico recibido del convenio quesero. Marca entregas como pagadas e ingresa el dinero a caja.
           </p>
         </div>
-        <div>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-sky-100 text-sky-800 capitalize">
-            Convenio $1.950 / L
-          </span>
-        </div>
+
+        <span className="self-start sm:self-center px-3.5 py-1.5 rounded-full text-xs font-bold bg-teal-500/10 text-teal-400 border border-teal-500/20 uppercase tracking-wider">
+          Módulo Exclusivo Admin
+        </span>
       </div>
 
-      {/* Tarjetas de Resumen de Liquidación */}
+      {mensaje && (
+        <div className={`p-4 rounded-xl flex items-start gap-3 border animate-fade-in ${
+          mensaje.type === 'success' 
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+            : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+        }`}>
+          <span className="text-lg">{mensaje.type === 'success' ? '✅' : '⚠️'}</span>
+          <p className="text-xs sm:text-sm font-medium">{mensaje.text}</p>
+        </div>
+      )}
+
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Litros Pendientes</span>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-black text-slate-900">
-              {totalLitrosPendientes.toLocaleString()} L
-            </span>
-            <span className="text-xs text-slate-400 font-medium">Por liquidar</span>
+        
+        {/* Acumulado Pendiente $ */}
+        <div className="bg-gradient-to-br from-teal-950/40 via-slate-900 to-slate-900 p-6 rounded-2xl border border-teal-500/30 shadow-xl flex flex-col justify-between gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-teal-400 uppercase tracking-wider">Total Pendiente por Cobrar</span>
+            <span className="text-2xl">🧀</span>
           </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-sky-600 to-blue-700 rounded-xl p-5 text-white shadow-md shadow-sky-500/10">
-          <span className="text-xs font-bold uppercase tracking-wider text-sky-100">Saldo a Favor Acumulado</span>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-black">
-              ${totalMontoPendiente.toLocaleString('es-CO')} COP
-            </span>
-            <span className="text-xs text-sky-100 font-medium">Pendiente de cobro</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Formulario de Cobro de Liquidación */}
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-6">
-        <h3 className="font-bold text-slate-900 text-lg border-b border-slate-100 pb-3">
-          Registrar Cobro de Liquidación
-        </h3>
-
-        {mensaje && (
-          <div className={`p-4 rounded-lg flex items-start gap-3 ${mensaje.type === 'success' ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
-            <div className={`flex-shrink-0 w-5 h-5 mt-0.5 ${mensaje.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
-              {mensaje.type === 'success' ? (
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              ) : (
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-            </div>
-            <p className={`text-sm font-medium ${mensaje.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
-              {mensaje.text}
+          <div>
+            <p className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+              ${totalMontoPendiente.toLocaleString('es-CO')} <span className="text-sm font-semibold text-teal-400">COP</span>
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Equivalente a {totalLitrosPendientes.toLocaleString()} Litros de leche entregados
             </p>
           </div>
-        )}
+          {totalMontoPendiente > 0 && (
+            <button
+              type="button"
+              onClick={handleCobrarTodo}
+              className="mt-2 py-2 px-4 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all self-start shadow-md shadow-teal-500/20 active:scale-95"
+            >
+              Cobrar Liquidación Total ($ {totalMontoPendiente.toLocaleString()})
+            </button>
+          )}
+        </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {/* Fecha */}
-          <div className="space-y-2">
-            <label htmlFor="fecha" className="block text-sm font-semibold text-slate-700">
-              Fecha de Cobro
-            </label>
-            <input
-              type="date"
-              id="fecha"
-              required
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 font-medium"
-            />
+        {/* Despachos */}
+        <div className="bg-slate-900/90 p-6 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Entregas por Liquidar</span>
+            <span className="text-2xl">📋</span>
           </div>
+          <div>
+            <p className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+              {entregasPendientes.length} <span className="text-sm font-semibold text-slate-400">Despachos</span>
+            </p>
+            <p className="text-xs text-slate-400 mt-1">Convenio a $1.950 por litro</p>
+          </div>
+          <Link
+            to="/quesera"
+            className="text-xs text-teal-400 hover:text-teal-300 font-bold self-start mt-2"
+          >
+            + Registrar nueva entrega de hoy →
+          </Link>
+        </div>
 
-          {/* Monto */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <label htmlFor="monto" className="block text-sm font-semibold text-slate-700">
-                Monto Recibido ($ COP)
-              </label>
-              <button
-                type="button"
-                onClick={() => setMontoCobro(totalMontoPendiente.toString())}
-                className="text-xs font-bold text-sky-600 hover:underline"
-              >
-                Cobrar Total Acumulado
-              </button>
+      </div>
+
+      {/* Formulario de Cobro */}
+      {loading ? (
+        <div className="card-dark border-slate-800 p-12 flex flex-col items-center justify-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-teal-500 border-t-transparent animate-spin" />
+          <p className="text-xs text-slate-400">Consultando entregas y liquidación de quesera...</p>
+        </div>
+      ) : totalMontoPendiente > 0 ? (
+        <div className="card-dark border-slate-800 p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-xl">
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-teal-400" />
+            Registrar Pago Recibido de la Quesera
+          </h3>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+              {/* Fecha */}
+              <div className="space-y-2">
+                <label htmlFor="fecha" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Fecha del Recibo
+                </label>
+                <input
+                  type="date"
+                  id="fecha"
+                  required
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-xl text-slate-100 font-medium focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all text-sm"
+                />
+              </div>
+
+              {/* Monto */}
+              <div className="space-y-2">
+                <label htmlFor="monto" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Monto Recibido ($ COP)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    id="monto"
+                    step="1000"
+                    min="1"
+                    max={totalMontoPendiente}
+                    required
+                    placeholder="0"
+                    value={montoCobro}
+                    onChange={(e) => setMontoCobro(e.target.value)}
+                    className="w-full pl-5 pr-14 py-3 bg-slate-950/80 border border-slate-800 rounded-xl text-xl font-black text-teal-400 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all placeholder:text-slate-700"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">
+                    COP
+                  </span>
+                </div>
+              </div>
             </div>
-            <input
-              type="number"
-              id="monto"
-              step="100"
-              min="1"
-              required
-              placeholder="Ej. 390000"
-              value={montoCobro}
-              onChange={(e) => setMontoCobro(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-lg text-slate-900 font-bold"
-            />
-          </div>
-        </div>
 
-        {/* Concepto */}
-        <div className="space-y-2">
-          <label htmlFor="concepto" className="block text-sm font-semibold text-slate-700">
-            Concepto / Nota (Opcional)
-          </label>
-          <input
-            type="text"
-            id="concepto"
-            placeholder="Ej. Pago quincena 1 a 15 del mes"
-            value={concepto}
-            onChange={(e) => setConcepto(e.target.value)}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 font-medium"
-          />
-        </div>
+            {/* Concepto */}
+            <div className="space-y-2">
+              <label htmlFor="concepto" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Concepto / Referencia Quincenal
+              </label>
+              <input
+                type="text"
+                id="concepto"
+                placeholder="Ej. Liquidación quincena 1 (marzo) recibida en efectivo"
+                value={concepto}
+                onChange={(e) => setConcepto(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-teal-500 transition-all text-sm font-medium"
+              />
+            </div>
 
-        <button
-          type="submit"
-          disabled={saving || totalMontoPendiente <= 0}
-          className="w-full flex justify-center items-center gap-2 py-4 px-4 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-semibold shadow-md shadow-sky-500/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 transition-all active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none"
-        >
-          {saving ? 'Registrando Liquidación...' : 'Registrar Cobro e Ingresar a Caja'}
-        </button>
-      </form>
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full py-4 px-6 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-teal-500/20 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  Liquidando y Actualizando Caja...
+                </>
+              ) : (
+                <>
+                  <span>Ingresar Liquidación a Caja Física</span>
+                  <span>→</span>
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+      ) : (
+        <div className="p-8 text-center rounded-2xl bg-teal-500/5 border border-teal-500/20 space-y-2">
+          <span className="text-3xl">✅</span>
+          <h3 className="text-base font-bold text-teal-400">Liquidación al día</h3>
+          <p className="text-xs text-slate-400">No hay entregas pendientes de cobro con la quesera en este momento.</p>
+        </div>
+      )}
 
       {/* Lista de Entregas Pendientes */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h3 className="font-bold text-slate-900 text-base">Entregas Pendientes en este Período</h3>
-        </div>
+      {entregasPendientes.length > 0 && (
+        <div className="card-dark border-slate-800 p-6 space-y-4 shadow-xl">
+          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+            Detalle de Entregas Pendientes ({entregasPendientes.length})
+          </h3>
 
-        {loading ? (
-          <div className="p-8 text-center text-slate-400">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-sky-500 border-t-transparent mb-2"></div>
-            <p className="text-sm">Cargando entregas a quesera...</p>
-          </div>
-        ) : entregasPendientes.length === 0 ? (
-          <div className="p-8 text-center text-slate-500">
-            <p className="text-sm font-medium">No hay entregas pendientes de cobro.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-800/80 max-h-96 overflow-y-auto pr-1">
             {entregasPendientes.map((item) => (
-              <div key={item.id} className="p-4 sm:px-6 flex justify-between items-center hover:bg-slate-50 transition-colors">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-900 text-sm">{item.fecha}</span>
-                    <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded capitalize font-medium">
-                      {item.jornada}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {Number(item.litros).toLocaleString()} L × $1.950
-                  </p>
+              <div key={item.id} className="py-3 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase ${
+                    item.jornada === 'manana' ? 'bg-amber-500/10 text-amber-400' : 'bg-indigo-500/10 text-indigo-400'
+                  }`}>
+                    {item.jornada === 'manana' ? '☀️ Mañana' : '🌙 Tarde'}
+                  </span>
+                  <span className="text-xs font-bold text-slate-200">{item.fecha}</span>
                 </div>
-
                 <div className="text-right">
-                  <span className="text-lg font-bold text-slate-900">
-                    ${Number(item.total).toLocaleString()} COP
+                  <span className="text-sm font-black text-white block">
+                    ${Number(item.total).toLocaleString('es-CO')} COP
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {Number(item.litros).toLocaleString()} Litros
                   </span>
                 </div>
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Navigation shortcuts */}
+      <div className="flex items-center justify-between text-xs text-slate-500 pt-2">
+        <Link to="/historial-caja" className="hover:text-teal-400 transition-colors">
+          Ver historial de movimientos de caja →
+        </Link>
+        <Link to="/" className="hover:text-slate-300 transition-colors">
+          ← Volver al Dashboard
+        </Link>
       </div>
+
     </div>
   );
 }

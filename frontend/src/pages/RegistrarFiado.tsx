@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 const PRECIO_LITRO = 2500;
@@ -6,7 +7,7 @@ const PRECIO_LITRO = 2500;
 interface Cliente {
   id: string;
   nombre: string;
-  telefono?: string;
+  telefono?: string | null;
 }
 
 export default function RegistrarFiado() {
@@ -15,62 +16,104 @@ export default function RegistrarFiado() {
   const [fecha, setFecha] = useState(today);
   const [jornada, setJornada] = useState<'manana' | 'tarde'>('manana');
   const [litros, setLitros] = useState('');
-  
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [selectedClienteId, setSelectedClienteId] = useState('');
+  const [busquedaCliente, setBusquedaCliente] = useState('');
   
-  // Modal / Form para nuevo cliente
+  // Stock
+  const [stockDisponible, setStockDisponible] = useState<number | null>(null);
+
+  // Nuevo Cliente Modal/Inline
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [nuevoTelefono, setNuevoTelefono] = useState('');
+  const [creandoCliente, setCreandoCliente] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [loadingClientes, setLoadingClientes] = useState(true);
   const [mensaje, setMensaje] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const litrosNum = parseFloat(litros) || 0;
-  const totalCalculado = litrosNum * PRECIO_LITRO;
-
   const fetchClientes = async () => {
+    setLoadingClientes(true);
     try {
-      const { data, error } = await supabase.from('clientes').select('*').order('nombre');
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('id, nombre, telefono')
+        .order('nombre');
+      
       if (error) throw error;
       setClientes(data || []);
     } catch (err) {
       console.error('Error al cargar clientes:', err);
+    } finally {
+      setLoadingClientes(false);
+    }
+  };
+
+  const fetchStock = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('movimientos_leche')
+        .select('tipo, litros');
+      
+      if (error) throw error;
+      const total = (data || []).reduce((acc, m) => {
+        if (m.tipo === 'produccion' || m.tipo === 'correccion') {
+          return acc + Number(m.litros);
+        }
+        return acc - Number(m.litros);
+      }, 0);
+      setStockDisponible(Math.max(0, total));
+    } catch (err) {
+      console.error('Error al consultar stock:', err);
     }
   };
 
   useEffect(() => {
     fetchClientes();
+    fetchStock();
   }, []);
+
+  const litrosNum = parseFloat(litros) || 0;
+  const totalCalculado = litrosNum * PRECIO_LITRO;
+
+  const clientesFiltrados = clientes.filter(c =>
+    c.nombre.toLowerCase().includes(busquedaCliente.toLowerCase()) ||
+    (c.telefono && c.telefono.includes(busquedaCliente))
+  );
 
   const handleCrearCliente = async (e: FormEvent) => {
     e.preventDefault();
     if (!nuevoNombre.trim()) return;
 
+    setCreandoCliente(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuario no autenticado');
 
       const { data, error } = await supabase
         .from('clientes')
         .insert({
           nombre: nuevoNombre.trim(),
           telefono: nuevoTelefono.trim() || null,
-          registrado_por: userData.user.id,
+          registrado_por: user.id,
         })
         .select()
         .single();
 
       if (error) throw error;
-
-      setClientes((prev) => [...prev, data]);
-      setSelectedClienteId(data.id);
-      setNuevoNombre('');
-      setNuevoTelefono('');
-      setMostrarNuevoCliente(false);
-    } catch (err: any) {
-      alert('Error al crear cliente: ' + (err.message || 'Error desconocido'));
+      if (data) {
+        setClientes((prev) => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+        setSelectedClienteId(data.id);
+        setMostrarNuevoCliente(false);
+        setNuevoNombre('');
+        setNuevoTelefono('');
+        setMensaje({ type: 'success', text: `Cliente "${data.nombre}" registrado exitosamente.` });
+      }
+    } catch (err: unknown) {
+      setMensaje({ type: 'error', text: (err as Error).message || 'Error al crear cliente.' });
+    } finally {
+      setCreandoCliente(false);
     }
   };
 
@@ -79,12 +122,20 @@ export default function RegistrarFiado() {
     setMensaje(null);
 
     if (!selectedClienteId) {
-      setMensaje({ type: 'error', text: 'Por favor selecciona un cliente para registrar el fiado.' });
+      setMensaje({ type: 'error', text: 'Por favor selecciona un cliente para cargar la deuda.' });
       return;
     }
 
     if (litrosNum <= 0) {
       setMensaje({ type: 'error', text: 'Por favor ingresa una cantidad de litros válida mayor a cero.' });
+      return;
+    }
+
+    if (stockDisponible !== null && litrosNum > stockDisponible) {
+      setMensaje({ 
+        type: 'error', 
+        text: `Stock insuficiente. Solo hay ${stockDisponible.toLocaleString()} L disponibles en el inventario.` 
+      });
       return;
     }
 
@@ -104,11 +155,12 @@ export default function RegistrarFiado() {
         const clienteSeleccionado = clientes.find((c) => c.id === selectedClienteId);
         setMensaje({
           type: 'success',
-          text: `¡Venta Fiada Registrada! Se cargaron $${totalCalculado.toLocaleString()} COP de deuda a ${clienteSeleccionado?.nombre || 'cliente'}.`,
+          text: `¡Venta Fiada Registrada! Se cargaron $${totalCalculado.toLocaleString('es-CO')} COP a la cuenta de ${clienteSeleccionado?.nombre || 'cliente'}.`,
         });
         setLitros('');
+        fetchStock();
       }
-    } catch (err: any) {
+    } catch {
       setMensaje({ type: 'error', text: 'Error inesperado de red o servidor.' });
     } finally {
       setLoading(false);
@@ -116,177 +168,259 @@ export default function RegistrarFiado() {
   };
 
   return (
-    <div className="max-w-xl mx-auto space-y-6 fade-in">
-      <div className="pb-4 border-b border-slate-100 flex items-center justify-between">
+    <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+      
+      {/* Header */}
+      <div className="pb-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Venta Fiada (Crédito)</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Registra una venta a crédito ($2.500/L). No ingresa dinero a caja.
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-amber-500/10 text-amber-400 text-lg">📋</span>
+            <h1 className="text-2xl font-black text-white tracking-tight">Venta Fiada (Crédito)</h1>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            Registra entregas a crédito a clientes ($2.500/L). Descuenta volumen y acumula deuda pendiente sin tocar caja física.
           </p>
         </div>
-        <div className="hidden sm:block">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 capitalize">
-            Cuenta por Cobrar
+
+        {/* Stock Badge */}
+        <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-4 py-2 rounded-xl">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs text-slate-400 font-medium">Stock disponible:</span>
+          <span className="text-sm font-extrabold text-white">
+            {stockDisponible !== null ? `${stockDisponible.toLocaleString()} L` : '...'}
           </span>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-6">
+      {/* Main Card */}
+      <div className="card-dark border-slate-800 p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-xl">
+        
         {mensaje && (
-          <div className={`p-4 rounded-lg flex items-start gap-3 ${mensaje.type === 'success' ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
-            <div className={`flex-shrink-0 w-5 h-5 mt-0.5 ${mensaje.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
-              {mensaje.type === 'success' ? (
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              ) : (
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-            </div>
-            <p className={`text-sm font-medium ${mensaje.type === 'success' ? 'text-emerald-800' : 'text-red-800'}`}>
-              {mensaje.text}
-            </p>
+          <div className={`p-4 rounded-xl flex items-start gap-3 border animate-fade-in ${
+            mensaje.type === 'success' 
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+              : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+          }`}>
+            <span className="text-lg">{mensaje.type === 'success' ? '✅' : '⚠️'}</span>
+            <p className="text-xs sm:text-sm font-medium">{mensaje.text}</p>
           </div>
         )}
 
-        {/* Cliente */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label htmlFor="cliente" className="block text-sm font-semibold text-slate-700">
-              Cliente
-            </label>
-            <button
-              type="button"
-              onClick={() => setMostrarNuevoCliente(!mostrarNuevoCliente)}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800"
-            >
-              {mostrarNuevoCliente ? 'Cancelar' : '+ Nuevo Cliente'}
-            </button>
-          </div>
-
-          {mostrarNuevoCliente ? (
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-              <h4 className="text-xs font-bold text-slate-700 uppercase">Agregar Nuevo Cliente</h4>
-              <input
-                type="text"
-                placeholder="Nombre del cliente"
-                value={nuevoNombre}
-                onChange={(e) => setNuevoNombre(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                type="text"
-                placeholder="Teléfono (opcional)"
-                value={nuevoTelefono}
-                onChange={(e) => setNuevoTelefono(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          
+          {/* Seleccionar Cliente con Buscador y botón para nuevo */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label htmlFor="cliente" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Cliente Deudor
+              </label>
               <button
                 type="button"
-                onClick={handleCrearCliente}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors"
+                onClick={() => setMostrarNuevoCliente(!mostrarNuevoCliente)}
+                className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
               >
-                Guardar Cliente
+                {mostrarNuevoCliente ? '✕ Cancelar' : '+ Crear nuevo cliente'}
               </button>
             </div>
-          ) : (
-            <select
-              id="cliente"
-              required
-              value={selectedClienteId}
-              onChange={(e) => setSelectedClienteId(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 transition-colors text-slate-700 font-medium outline-none"
-            >
-              <option value="">-- Seleccionar Cliente --</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre} {c.telefono ? `(${c.telefono})` : ''}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {/* Fecha */}
-          <div className="space-y-2">
-            <label htmlFor="fecha" className="block text-sm font-semibold text-slate-700">
-              Fecha
-            </label>
-            <input
-              type="date"
-              id="fecha"
-              required
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 font-medium"
-            />
-          </div>
+            {/* Modal/Panel de Nuevo Cliente */}
+            {mostrarNuevoCliente && (
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-500/30 space-y-3 animate-fade-in">
+                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+                  Registrar Nuevo Cliente
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    placeholder="Nombre completo *"
+                    value={nuevoNombre}
+                    onChange={(e) => setNuevoNombre(e.target.value)}
+                    className="px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Teléfono (opcional)"
+                    value={nuevoTelefono}
+                    onChange={(e) => setNuevoTelefono(e.target.value)}
+                    className="px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={creandoCliente || !nuevoNombre.trim()}
+                  onClick={handleCrearCliente}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                >
+                  {creandoCliente ? 'Guardando...' : 'Guardar Cliente'}
+                </button>
+              </div>
+            )}
 
-          {/* Jornada */}
-          <div className="space-y-2">
-            <label htmlFor="jornada" className="block text-sm font-semibold text-slate-700">
-              Jornada
-            </label>
-            <select
-              id="jornada"
-              value={jornada}
-              onChange={(e) => setJornada(e.target.value as 'manana' | 'tarde')}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 font-medium"
-            >
-              <option value="manana">Mañana</option>
-              <option value="tarde">Tarde</option>
-            </select>
-          </div>
-        </div>
+            {/* Dropdown y buscador */}
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="🔍 Filtrar por nombre o teléfono..."
+                value={busquedaCliente}
+                onChange={(e) => setBusquedaCliente(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-amber-400"
+              />
 
-        {/* Litros */}
-        <div className="space-y-2">
-          <label htmlFor="litros" className="block text-sm font-semibold text-slate-700">
-            Litros Fiados
-          </label>
-          <div className="relative">
-            <input
-              type="number"
-              id="litros"
-              step="0.01"
-              min="0.1"
-              required
-              placeholder="Ej. 15"
-              value={litros}
-              onChange={(e) => setLitros(e.target.value)}
-              className="w-full pl-4 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-xl text-slate-900 font-bold"
-            />
-            <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
-              <span className="text-slate-400 font-medium">L</span>
+              <select
+                id="cliente"
+                required
+                value={selectedClienteId}
+                onChange={(e) => setSelectedClienteId(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-950/80 border border-slate-800 rounded-xl text-sm font-medium text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
+              >
+                <option value="">-- Selecciona un cliente ({clientesFiltrados.length} disponibles) --</option>
+                {clientesFiltrados.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre} {c.telefono ? `(${c.telefono})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-        </div>
 
-        {/* Valor Deuda */}
-        <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex justify-between items-center">
-          <div>
-            <span className="text-xs text-amber-800 uppercase tracking-wider font-semibold">Valor Deuda por Cobrar</span>
-            <p className="text-2xl font-black text-amber-700">
-              ${totalCalculado.toLocaleString('es-CO')} COP
-            </p>
-          </div>
-          <div className="text-right text-xs text-amber-700">
-            <p>$2.500 / L</p>
-            <p>Sin ingreso a caja</p>
-          </div>
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            {/* Fecha */}
+            <div className="space-y-2">
+              <label htmlFor="fecha" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Fecha
+              </label>
+              <input
+                type="date"
+                id="fecha"
+                required
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-xl text-slate-100 font-medium focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all text-sm"
+              />
+            </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full flex justify-center items-center gap-2 py-4 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold shadow-md shadow-amber-500/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none"
-        >
-          {loading ? 'Guardando Venta Fiada...' : 'Registrar Venta Fiada'}
-        </button>
-      </form>
+            {/* Jornada */}
+            <div className="space-y-2">
+              <label htmlFor="jornada" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Jornada
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setJornada('manana')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    jornada === 'manana'
+                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                      : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  ☀️ Mañana
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJornada('tarde')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    jornada === 'tarde'
+                      ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300'
+                      : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  🌙 Tarde
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Litros Input with Presets */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label htmlFor="litros" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Litros Fiados
+              </label>
+              <span className="text-[11px] text-slate-500">$2.500 COP / L</span>
+            </div>
+
+            <div className="relative">
+              <input
+                type="number"
+                id="litros"
+                step="0.1"
+                min="0.1"
+                required
+                placeholder="0.0"
+                value={litros}
+                onChange={(e) => setLitros(e.target.value)}
+                className="w-full pl-5 pr-14 py-4 bg-slate-950/80 border border-slate-800 rounded-2xl text-2xl font-black text-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-700"
+              />
+              <span className="absolute right-5 top-1/2 -translate-y-1/2 text-sm font-black text-slate-500">
+                L
+              </span>
+            </div>
+
+            {/* Presets */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Presets:</span>
+              {[1, 2, 5, 10, 15].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => setLitros(num.toString())}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
+                >
+                  {num} L
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Cálculo del Total */}
+          <div className="bg-gradient-to-r from-amber-950/30 via-slate-900 to-slate-900 p-5 rounded-2xl border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
+            <div>
+              <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest block">
+                Deuda a Registrar
+              </span>
+              <p className="text-3xl font-black text-white tracking-tight">
+                ${totalCalculado.toLocaleString('es-CO')} <span className="text-sm font-semibold text-amber-400">COP</span>
+              </p>
+            </div>
+            <div className="text-right text-xs text-slate-400 border-t sm:border-t-0 sm:border-l border-slate-800/80 pt-2 sm:pt-0 sm:pl-4">
+              <p className="font-semibold text-slate-300">{litrosNum || 0} Litros × $2.500</p>
+              <p className="text-[11px] text-amber-400/80">⚠️ No entra dinero a caja física</p>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading || loadingClientes}
+            className="w-full py-4 px-6 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                Registrando Deuda...
+              </>
+            ) : (
+              <>
+                <span>Registrar Venta Fiada</span>
+                <span>→</span>
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+
+      {/* Navigation shortcuts */}
+      <div className="flex items-center justify-between text-xs text-slate-500 pt-2">
+        <Link to="/cobrar-fiado" className="hover:text-amber-400 transition-colors">
+          ¿Cliente va a abonar? → <span className="underline font-bold">Cobrar Fiado</span>
+        </Link>
+        <Link to="/clientes" className="hover:text-slate-300 transition-colors">
+          Ver saldos acumulados →
+        </Link>
+      </div>
+
     </div>
   );
 }

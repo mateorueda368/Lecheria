@@ -100,7 +100,26 @@ BEGIN
         v_usuario
     ) RETURNING id INTO v_caja_id;
 
-    -- Si se pagó la totalidad del saldo pendiente, marcar entregas como 'pagada'
+    -- Marcar entregas completadas bajo modelo FIFO
+    DECLARE
+        r RECORD;
+        v_monto_restante numeric(10,2) := p_monto;
+    BEGIN
+        FOR r IN 
+            SELECT id, total FROM public.entregas_quesera 
+            WHERE estado = 'pendiente' 
+            ORDER BY fecha ASC, created_at ASC 
+        LOOP
+            IF v_monto_restante >= r.total THEN
+                UPDATE public.entregas_quesera SET estado = 'pagada' WHERE id = r.id;
+                v_monto_restante := v_monto_restante - r.total;
+            ELSE
+                EXIT;
+            END IF;
+        END LOOP;
+    END;
+
+    -- Si se pagó la totalidad del saldo pendiente, asegurar que todas queden en 'pagada'
     IF v_nuevo_saldo = 0 THEN
         UPDATE public.entregas_quesera
         SET estado = 'pagada'

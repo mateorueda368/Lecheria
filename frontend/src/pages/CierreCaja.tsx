@@ -48,7 +48,7 @@ export default function CierreCaja() {
       const baseUlt = ultCierre ? Number(ultCierre.base_siguiente) : 0;
       setBaseAnterior(baseUlt);
 
-      let query = supabase.from('movimientos_caja').select('tipo, monto');
+      let query = supabase.from('movimientos_caja').select('tipo, monto, concepto');
       if (ultCierre?.created_at) {
         query = query.gt('created_at', ultCierre.created_at);
       }
@@ -59,8 +59,14 @@ export default function CierreCaja() {
       let egresos = 0;
       (movimientos || []).forEach((m) => {
         const montoNum = Number(m.monto);
-        if (['ingreso_venta', 'pago_cliente', 'pago_quesera'].includes(m.tipo)) ingresos += montoNum;
-        else if (['egreso_flete', 'retiro'].includes(m.tipo)) egresos += montoNum;
+        if (['ingreso_venta', 'pago_cliente', 'pago_quesera'].includes(m.tipo) || (m.tipo === 'correccion' && montoNum > 0)) {
+          ingresos += montoNum;
+        } else if (
+          (m.tipo === 'egreso_flete' || (m.tipo === 'retiro' && (!m.concepto || !m.concepto.toLowerCase().includes('cierre de caja')))) ||
+          (m.tipo === 'correccion' && montoNum < 0)
+        ) {
+          egresos += Math.abs(montoNum);
+        }
       });
 
       setTotalIngresos(ingresos);

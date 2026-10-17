@@ -1,33 +1,73 @@
-# Prueba temporal autenticada
+# 🥛 Sistema de Gestión de Lechería
 
-Esta página sirve únicamente para comprobar una sesión autenticada real contra
-Supabase y ejecutar `registrar_produccion()`.
+Sistema integral para el control operativo, financiero y de volumen en fincas y lecherías cooperativas. Desarrollado con **React 19 + TypeScript + Vite + TailwindCSS** en el frontend y **Supabase (PostgreSQL + RLS + RPC Stored Procedures)** en el backend.
 
-## Preparación
+---
 
-1. En Supabase abre Project Settings -> API.
-2. Copia el Project URL.
-3. Copia la clave pública `anon`/`publishable`.
-4. NO uses `service_role`.
+## 🏗️ Arquitectura y Flujos Conectados
 
-## Uso
+El sistema une los 3 pilares clave del negocio lácteo bajo reglas de consistencia matemática estricta:
 
-Abre `prueba-registrar-produccion.html` en el navegador.
+```mermaid
+graph TD
+    A["Ordeño Diario (/registrar)"] -->|Cardex Litros| B["Inventario de Leche (movimientos_leche)"]
+    B --> C["Venta Directa en Efectivo ($2.500/L)"]
+    B --> D["Venta Fiada a Crédito ($2.500/L)"]
+    B --> E["Consumo Finca / Terneros (0 COP)"]
+    B --> F["Entrega a Quesera ($1.950/L)"]
+    C -->|Efectivo Inmediato| G["Caja Física (movimientos_caja)"]
+    D -->|Cuenta por Cobrar| H["Cartera Clientes (pagos_clientes)"]
+    F -->|Liquidación Quincenal| I["Cuentas Quesera (entregas_quesera)"]
+    H -->|Cobro Abono / Total| G
+    I -->|Cobro Liquidación FIFO| G
+    G --> J["Arqueo y Cierre de Caja (/cierre-caja)"]
+    G --> K["Egresos / Fletes (/egresos)"]
+```
 
-Introduce:
-- Project URL
-- clave pública
-- correo del administrador
-- contraseña
-- 32 litros
+---
 
-Pulsa el botón una sola vez.
+## 📦 Módulos del Sistema
 
-La prueba usa la fecha actual y la jornada `manana`. Si es exitosa, no vuelvas
-a ejecutarla con esa misma fecha y jornada porque `UNIQUE(fecha, jornada)` debe
-rechazar un duplicado.
+| Módulo | Ruta | Rol Mínimo | Descripción |
+|---|---|---|---|
+| **Dashboard General** | `/` | Trabajador | KPIs en tiempo real: stock de leche, caja esperada, ventas del día, resumen de ordeños y accesos directos. |
+| **Registrar Ordeño** | `/registrar` | Trabajador | Pesaje de leche por jornada (Mañana/Tarde). Restricción anti-duplicación por fecha y turno. |
+| **Historial de Ordeños** | `/produccion` | Trabajador | Consulta de producción diaria, comparación mañana vs tarde y totales. |
+| **Venta Directa** | `/venta-directa` | Trabajador | Venta en efectivo a $2.500/L con cálculo automático de stock disponible. |
+| **Venta Fiada** | `/fiados` | Trabajador | Registro a crédito con selección rápida de clientes y creación de nuevos deudores en el acto. |
+| **Consumo Finca** | `/consumo` | Trabajador | Salida de leche para autoconsumo o alimentación animal sin impacto en caja. |
+| **Entrega a Quesera** | `/quesera` | Trabajador | Despacho de cantinas a precio de convenio ($1.950/L) acumuladas para cobro periódico. |
+| **Cobro de Fiados** | `/cobrar-fiado` | Administrador | Abono o pago total de saldos de clientes con ingreso de efectivo a caja física. |
+| **Liquidación Quesera** | `/liquidacion-quesera` | Administrador | Cobro quincenal de la quesera con modelo FIFO para marcar entregas saldadas. |
+| **Egresos y Retiros** | `/egresos` | Administrador | Salidas de caja para pagos de transporte/flete o retiros de utilidad. |
+| **Cierre de Caja** | `/cierre-caja` | Administrador | Arqueo físico contra caja esperada, cálculo de sobrante/faltante y retiro automático a base. |
+| **Historial de Caja** | `/historial-caja` | Administrador | Libro diario de movimientos financieros con filtros por fecha y categoría. |
+| **Estado de Clientes** | `/clientes` | Administrador | Detalle de deudas acumuladas, desglose de entregas y abonos históricos. |
+| **Correcciones Trazables**| `/correcciones` | Administrador | Auditoría de ajustes con movimientos compensatorios automáticos sin borrar historial. |
 
-Después de una prueba exitosa verificaremos `producciones_leche` y
-`movimientos_leche`.
+---
 
-Si aparece un error, copia el mensaje completo y no cambies ningún archivo.
+## 🗄️ Base de Datos y Supabase
+
+El archivo maestro consolidado se encuentra en [`bd/00_master_schema.sql`](bd/00_master_schema.sql).
+
+### Instrucciones de despliegue en Supabase:
+1. Abre el panel de tu proyecto en [Supabase](https://supabase.com).
+2. Ve al **SQL Editor**.
+3. Copia y ejecuta todo el contenido de [`bd/00_master_schema.sql`](bd/00_master_schema.sql).
+4. El script configurará:
+   - Tablas maestras (`profiles`, `producciones_leche`, `movimientos_leche`, `clientes`, `ventas_directas`, `entregas_quesera`, `movimientos_caja`, `pagos_clientes`, `pagos_quesera`, `cierres_caja`, `correcciones`).
+   - Políticas RLS (Row Level Security) seguras para trabajadores y administradores.
+   - Procedimientos almacenados transaccionales (RPCs) para cada operación.
+
+---
+
+## 🚀 Ejecución en Desarrollo
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+El aplicativo estará disponible en `http://localhost:5173`.

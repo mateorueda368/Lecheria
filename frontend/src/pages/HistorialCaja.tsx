@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
-// --- Types ---
 interface MovimientoCaja {
   id: string;
   fecha: string;
@@ -11,7 +11,6 @@ interface MovimientoCaja {
   created_at: string;
 }
 
-// --- Helpers ---
 const fmtCOP = (n: number) =>
   '$' + Math.abs(n).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -22,27 +21,24 @@ const fmtFecha = (iso: string) => {
 
 const TIPOS = [
   { value: '', label: 'Todos los tipos' },
-  { value: 'ingreso_venta', label: 'Ingreso por Venta' },
-  { value: 'pago_cliente', label: 'Cobro de Fiado' },
-  { value: 'pago_quesera', label: 'Liquidación Quesera' },
-  { value: 'egreso_flete', label: 'Egreso / Flete' },
-  { value: 'retiro', label: 'Retiro' },
-  { value: 'correccion', label: 'Corrección' },
+  { value: 'ingreso_venta', label: 'Ingreso por Venta Directa' },
+  { value: 'pago_cliente', label: 'Cobro de Fiado a Cliente' },
+  { value: 'pago_quesera', label: 'Liquidación de Quesera' },
+  { value: 'egreso_flete', label: 'Egreso por Flete' },
+  { value: 'retiro', label: 'Retiro del Administrador' },
+  { value: 'correccion', label: 'Corrección Trazable' },
 ];
 
-const TIPO_LABELS: Record<string, { label: string; color: string }> = {
-  ingreso_venta: { label: 'Venta Directa', color: 'bg-emerald-100 text-emerald-800' },
-  pago_cliente:  { label: 'Cobro Fiado',   color: 'bg-blue-100 text-blue-800' },
-  pago_quesera:  { label: 'Liq. Quesera',  color: 'bg-teal-100 text-teal-800' },
-  egreso_flete:  { label: 'Egreso/Flete',  color: 'bg-amber-100 text-amber-800' },
-  retiro:        { label: 'Retiro',        color: 'bg-rose-100 text-rose-800' },
-  correccion:    { label: 'Corrección',    color: 'bg-purple-100 text-purple-800' },
+const TIPO_LABELS: Record<string, { label: string; badgeClass: string; icon: string }> = {
+  ingreso_venta: { label: 'Venta Directa', badgeClass: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20', icon: '💰' },
+  pago_cliente:  { label: 'Cobro Fiado',   badgeClass: 'bg-blue-500/10 text-blue-400 border border-blue-500/20', icon: '💵' },
+  pago_quesera:  { label: 'Liq. Quesera',  badgeClass: 'bg-teal-500/10 text-teal-400 border border-teal-500/20', icon: '🧀' },
+  egreso_flete:  { label: 'Flete Leche',   badgeClass: 'bg-amber-500/10 text-amber-400 border border-amber-500/20', icon: '🚚' },
+  retiro:        { label: 'Retiro Caja',   badgeClass: 'bg-purple-500/10 text-purple-400 border border-purple-500/20', icon: '💼' },
+  correccion:    { label: 'Corrección',    badgeClass: 'bg-rose-500/10 text-rose-400 border border-rose-500/20', icon: '⚖️' },
 };
 
-// Para correcciones, el signo del monto determina si es ingreso o egreso.
-// Se evalúa en el render; aquí solo los tipos fijos positivos.
-const TIPOS_INGRESO = new Set(['ingreso_venta', 'pago_cliente', 'pago_quesera']);
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 20;
 
 export default function HistorialCaja() {
   const today = new Date().toISOString().split('T')[0];
@@ -76,7 +72,7 @@ export default function HistorialCaja() {
       setMovimientos(data ?? []);
       setPagina(1);
     } catch (e: unknown) {
-      setError((e as Error).message ?? 'Error al cargar movimientos');
+      setError((e as Error).message ?? 'Error al cargar movimientos de caja');
     } finally {
       setLoading(false);
     }
@@ -86,14 +82,28 @@ export default function HistorialCaja() {
     fetchMovimientos();
   }, [fetchMovimientos]);
 
-  // Métricas del período
-  const totalIngresos = movimientos
-    .filter((m) => TIPOS_INGRESO.has(m.tipo))
-    .reduce((acc, m) => acc + Number(m.monto), 0);
+  // Métricas del período considerando correctamente correcciones positivas y negativas
+  const totalIngresos = movimientos.reduce((acc, m) => {
+    const monto = Number(m.monto);
+    if (['ingreso_venta', 'pago_cliente', 'pago_quesera'].includes(m.tipo)) {
+      return acc + monto;
+    }
+    if (m.tipo === 'correccion' && monto > 0) {
+      return acc + monto;
+    }
+    return acc;
+  }, 0);
 
-  const totalEgresos = movimientos
-    .filter((m) => !TIPOS_INGRESO.has(m.tipo))
-    .reduce((acc, m) => acc + Number(m.monto), 0);
+  const totalEgresos = movimientos.reduce((acc, m) => {
+    const monto = Number(m.monto);
+    if (['egreso_flete', 'retiro'].includes(m.tipo)) {
+      return acc + monto;
+    }
+    if (m.tipo === 'correccion' && monto < 0) {
+      return acc + Math.abs(monto);
+    }
+    return acc;
+  }, 0);
 
   const saldoNeto = totalIngresos - totalEgresos;
 
@@ -102,160 +112,218 @@ export default function HistorialCaja() {
   const paginados = movimientos.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in">
+      
       {/* Header */}
-      <div className="pb-4 border-b border-slate-100">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Historial de Caja</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Consulta y filtra todos los movimientos de dinero registrados.
-        </p>
+      <div className="pb-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 text-lg">📑</span>
+            <h1 className="text-2xl font-black text-white tracking-tight">Historial de Caja Física</h1>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            Libro diario de ingresos, egresos, retiros y correcciones trazables de dinero en efectivo.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            to="/egresos"
+            className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-all"
+          >
+            - Registrar Egreso
+          </Link>
+          <Link
+            to="/cierre-caja"
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/20"
+          >
+            Arqueo y Cierre →
+          </Link>
+        </div>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Desde</label>
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+          ⚠️ {error}
+        </div>
+      )}
+
+      {/* Tarjetas de Resumen del Período */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        
+        {/* Total Ingresos */}
+        <div className="card-dark border-slate-800 p-5 space-y-1 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Ingresos del Período</span>
+            <span className="text-sm font-black text-emerald-400">↓ Entradas</span>
+          </div>
+          <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            {fmtCOP(totalIngresos)} <span className="text-xs font-semibold text-emerald-400">COP</span>
+          </p>
+          <p className="text-[11px] text-slate-500">Ventas directas + cobros fiados + quesera</p>
+        </div>
+
+        {/* Total Egresos */}
+        <div className="card-dark border-slate-800 p-5 space-y-1 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">Egresos del Período</span>
+            <span className="text-sm font-black text-rose-400">↑ Salidas</span>
+          </div>
+          <p className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            {fmtCOP(totalEgresos)} <span className="text-xs font-semibold text-rose-400">COP</span>
+          </p>
+          <p className="text-[11px] text-slate-500">Fletes + retiros de caja</p>
+        </div>
+
+        {/* Flujo Neto */}
+        <div className="bg-gradient-to-br from-indigo-950/40 via-slate-900 to-slate-900 border border-indigo-500/30 p-5 rounded-2xl space-y-1 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Flujo Neto del Filtro</span>
+            <span className="text-sm font-black text-indigo-400">Flujo</span>
+          </div>
+          <p className={`text-2xl sm:text-3xl font-black tracking-tight ${saldoNeto >= 0 ? 'text-white' : 'text-rose-400'}`}>
+            {saldoNeto >= 0 ? '+' : '-'}{fmtCOP(saldoNeto)} <span className="text-xs font-semibold text-indigo-400">COP</span>
+          </p>
+          <p className="text-[11px] text-slate-400">Diferencial entre ingresos y egresos</p>
+        </div>
+
+      </div>
+
+      {/* Barra de Filtros */}
+      <div className="card-dark border-slate-800 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-xl">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label htmlFor="desde" className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Desde:
+            </label>
             <input
               type="date"
+              id="desde"
               value={desde}
               onChange={(e) => setDesde(e.target.value)}
-              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="px-3 py-1.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-indigo-500"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Hasta</label>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="hasta" className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Hasta:
+            </label>
             <input
               type="date"
+              id="hasta"
               value={hasta}
               onChange={(e) => setHasta(e.target.value)}
-              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="px-3 py-1.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-indigo-500"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Tipo</label>
-            <select
-              value={tipoFiltro}
-              onChange={(e) => setTipoFiltro(e.target.value)}
-              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              {TIPOS.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label htmlFor="tipo" className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Tipo:
+          </label>
+          <select
+            id="tipo"
+            value={tipoFiltro}
+            onChange={(e) => setTipoFiltro(e.target.value)}
+            className="px-3 py-1.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-indigo-500"
+          >
+            {TIPOS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* KPIs del período */}
-      {!loading && !error && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-            <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Ingresos</p>
-            <p className="text-xl font-black text-emerald-800">{fmtCOP(totalIngresos)}</p>
-          </div>
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-center">
-            <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">Egresos</p>
-            <p className="text-xl font-black text-rose-800">{fmtCOP(totalEgresos)}</p>
-          </div>
-          <div className={`border rounded-xl p-4 text-center ${saldoNeto >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
-            <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${saldoNeto >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
-              Saldo Neto
-            </p>
-            <p className={`text-xl font-black ${saldoNeto >= 0 ? 'text-blue-800' : 'text-amber-800'}`}>
-              {saldoNeto >= 0 ? '+' : '-'}{fmtCOP(saldoNeto)}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Tabla */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-500 text-sm font-medium">Cargando movimientos...</p>
-        </div>
-      ) : error ? (
-        <div className="text-center py-12">
-          <p className="text-rose-600 font-semibold">⚠️ {error}</p>
-          <button onClick={fetchMovimientos} className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">
-            Reintentar
-          </button>
-        </div>
-      ) : movimientos.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
-          <p className="text-4xl mb-3">📭</p>
-          <p className="font-medium">No hay movimientos en este período.</p>
-          <p className="text-sm mt-1">Ajusta el rango de fechas o el tipo de filtro.</p>
-        </div>
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Fecha</th>
-                  <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Tipo</th>
-                  <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Concepto</th>
-                  <th className="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Monto</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginados.map((mov) => {
-                  // Para correcciones: positivo = ingreso, negativo = egreso
-                  const esIngreso = mov.tipo === 'correccion'
-                    ? Number(mov.monto) >= 0
-                    : TIPOS_INGRESO.has(mov.tipo);
-                  const tipoInfo = TIPO_LABELS[mov.tipo] ?? { label: mov.tipo, color: 'bg-slate-100 text-slate-700' };
-                  return (
-                    <tr key={mov.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap font-medium">
-                        {fmtFecha(mov.fecha)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${tipoInfo.color}`}>
-                          {tipoInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700 max-w-xs truncate">
-                        {mov.concepto ?? '—'}
-                      </td>
-                      <td className={`px-4 py-3 text-right font-bold whitespace-nowrap ${esIngreso ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        {esIngreso ? '+' : '−'}{fmtCOP(mov.monto)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Paginación */}
+      {/* Lista de Movimientos */}
+      <div className="card-dark border-slate-800 p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+            Movimientos Registrados ({movimientos.length})
+          </h3>
           {totalPaginas > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">
-                {movimientos.length} registros · Página {pagina} de {totalPaginas}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  disabled={pagina === 1}
-                  onClick={() => setPagina((p) => p - 1)}
-                  className="px-3 py-1.5 text-sm font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  ← Anterior
-                </button>
-                <button
-                  disabled={pagina === totalPaginas}
-                  onClick={() => setPagina((p) => p + 1)}
-                  className="px-3 py-1.5 text-sm font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  Siguiente →
-                </button>
-              </div>
-            </div>
+            <span className="text-xs text-slate-500">
+              Página {pagina} de {totalPaginas}
+            </span>
           )}
-        </>
-      )}
+        </div>
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+            <p className="text-xs text-slate-400">Cargando movimientos de caja...</p>
+          </div>
+        ) : movimientos.length === 0 ? (
+          <p className="text-xs text-slate-500 text-center py-8">
+            No se encontraron movimientos de caja en el período seleccionado.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-800/80">
+            {paginados.map((m) => {
+              const meta = TIPO_LABELS[m.tipo] || { label: m.tipo, badgeClass: 'bg-slate-800 text-slate-400', icon: '💰' };
+              const esIngreso = ['ingreso_venta', 'pago_cliente', 'pago_quesera'].includes(m.tipo) ||
+                (m.tipo === 'correccion' && Number(m.monto) > 0);
+
+              return (
+                <div key={m.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start sm:items-center gap-3">
+                    <span className="p-2 rounded-xl bg-slate-950/60 border border-slate-800 text-lg flex-shrink-0">
+                      {meta.icon}
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase ${meta.badgeClass}`}>
+                          {meta.label}
+                        </span>
+                        <span className="text-xs font-bold text-slate-400">{fmtFecha(m.fecha)}</span>
+                      </div>
+                      <p className="text-xs text-slate-200 mt-1 font-medium">{m.concepto || 'Sin concepto detallado'}</p>
+                    </div>
+                  </div>
+
+                  <div className="text-right sm:self-center pl-11 sm:pl-0">
+                    <span className={`text-base font-black tracking-tight ${esIngreso ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {esIngreso ? '+' : '-'}{fmtCOP(Number(m.monto))}
+                    </span>
+                    <span className="text-[10px] text-slate-500 block">
+                      {new Date(m.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Paginación */}
+        {totalPaginas > 1 && (
+          <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between">
+            <button
+              type="button"
+              disabled={pagina === 1}
+              onClick={() => setPagina((p) => Math.max(1, p - 1))}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-all"
+            >
+              ← Anterior
+            </button>
+            <span className="text-xs text-slate-500 font-medium">
+              Página {pagina} de {totalPaginas}
+            </span>
+            <button
+              type="button"
+              disabled={pagina === totalPaginas}
+              onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-all"
+            >
+              Siguiente →
+            </button>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
