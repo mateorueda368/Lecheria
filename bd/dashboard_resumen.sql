@@ -35,15 +35,15 @@ BEGIN
   SELECT COALESCE(
     SUM(
       CASE 
-        WHEN tipo = 'produccion' THEN litros 
-        WHEN tipo = 'correccion' THEN litros 
-        ELSE -litros 
+        WHEN ml.tipo = 'produccion' THEN ml.litros 
+        WHEN ml.tipo = 'correccion' THEN ml.litros 
+        ELSE -ml.litros 
       END
     ),
     0
   )
   INTO v_stock_leche
-  FROM public.movimientos_leche;
+  FROM public.movimientos_leche AS ml;
 
   -- 2. Producción de hoy por jornada
   -- La jornada (manana/tarde) está en producciones_leche, no en movimientos_leche

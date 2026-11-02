@@ -73,8 +73,14 @@ BEGIN
     END IF;
 
     -- Validar stock de leche disponible (RN-011)
-    SELECT COALESCE(SUM(CASE WHEN tipo = 'produccion' THEN litros ELSE -litros END), 0)
-    INTO v_stock_disponible FROM public.movimientos_leche;
+    SELECT COALESCE(SUM(
+        CASE 
+            WHEN ml.tipo = 'produccion' THEN ml.litros 
+            WHEN ml.tipo = 'correccion' THEN ml.litros 
+            ELSE -ml.litros 
+        END
+    ), 0)
+    INTO v_stock_disponible FROM public.movimientos_leche AS ml;
 
     IF p_litros > v_stock_disponible THEN
         RAISE EXCEPTION 'Stock insuficiente de leche. Litros disponibles: %, solicitados: %', v_stock_disponible, p_litros;

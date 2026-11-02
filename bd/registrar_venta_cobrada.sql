@@ -9,7 +9,7 @@ BEGIN;
 -- Ajustar restricciones de movimientos_leche si es necesario
 ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_tipo_chk;
 ALTER TABLE public.movimientos_leche ADD CONSTRAINT movimientos_leche_tipo_chk 
-    CHECK (tipo IN ('produccion', 'venta_cobrada', 'venta_fiada', 'consumo', 'entrega_quesera'));
+    CHECK (tipo IN ('produccion', 'venta_cobrada', 'venta_fiada', 'consumo', 'entrega_quesera', 'correccion'));
 
 ALTER TABLE public.movimientos_leche ALTER COLUMN produccion_id DROP NOT NULL;
 ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_produccion_uk;
@@ -82,8 +82,14 @@ BEGIN
     END IF;
 
     -- Validar stock de leche disponible (RN-011)
-    SELECT COALESCE(SUM(CASE WHEN tipo = 'produccion' THEN litros ELSE -litros END), 0)
-    INTO v_stock_disponible FROM public.movimientos_leche;
+    SELECT COALESCE(SUM(
+        CASE 
+            WHEN ml.tipo = 'produccion' THEN ml.litros 
+            WHEN ml.tipo = 'correccion' THEN ml.litros 
+            ELSE -ml.litros 
+        END
+    ), 0)
+    INTO v_stock_disponible FROM public.movimientos_leche AS ml;
 
     IF p_litros > v_stock_disponible THEN
         RAISE EXCEPTION 'Stock insuficiente de leche. Litros disponibles: %, solicitados: %', v_stock_disponible, p_litros;
