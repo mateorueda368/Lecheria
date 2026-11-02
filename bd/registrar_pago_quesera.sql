@@ -106,12 +106,12 @@ BEGIN
         v_monto_restante numeric(10,2) := p_monto;
     BEGIN
         FOR r IN 
-            SELECT id, total FROM public.entregas_quesera 
-            WHERE estado = 'pendiente' 
-            ORDER BY fecha ASC, created_at ASC 
+            SELECT eq.id, eq.total FROM public.entregas_quesera AS eq
+            WHERE eq.estado = 'pendiente' 
+            ORDER BY eq.fecha ASC, eq.created_at ASC 
         LOOP
             IF v_monto_restante >= r.total THEN
-                UPDATE public.entregas_quesera SET estado = 'pagada' WHERE id = r.id;
+                UPDATE public.entregas_quesera AS eq SET estado = 'pagada' WHERE eq.id = r.id;
                 v_monto_restante := v_monto_restante - r.total;
             ELSE
                 EXIT;
@@ -121,9 +121,9 @@ BEGIN
 
     -- Si se pagó la totalidad del saldo pendiente, asegurar que todas queden en 'pagada'
     IF v_nuevo_saldo = 0 THEN
-        UPDATE public.entregas_quesera
+        UPDATE public.entregas_quesera AS eq
         SET estado = 'pagada'
-        WHERE estado = 'pendiente';
+        WHERE eq.estado = 'pendiente';
     END IF;
 
     RETURN QUERY
