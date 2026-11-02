@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
+import { exportToCSV, printReport } from '../lib/exportUtils';
 
 interface EntregaQuesera {
   id: string;
@@ -57,6 +58,85 @@ export default function LiquidacionQuesera() {
     setMontoCobro(totalMontoPendiente.toString());
   };
 
+  // --- Exportar Cuenta de Cobro en PDF ---
+  const handleExportCuentaCobroPDF = () => {
+    if (entregasPendientes.length === 0) {
+      alert('No hay entregas pendientes para generar la cuenta de cobro.');
+      return;
+    }
+
+    const fechas = entregasPendientes.map((e) => e.fecha).sort();
+    const fechaMin = fechas[0];
+    const fechaMax = fechas[fechas.length - 1];
+
+    const tableHeaders = ['Fecha Despacho', 'Jornada', 'Litros (L)', 'Precio Pactado', 'Subtotal ($ COP)'];
+    const tableAligns: ('left' | 'center' | 'right' | 'right' | 'right')[] = ['left', 'center', 'right', 'right', 'right'];
+
+    const tableRows = entregasPendientes.map((item) => [
+      item.fecha,
+      item.jornada === 'manana' ? '☀️ Mañana' : '🌙 Tarde',
+      `${Number(item.litros).toLocaleString('es-CO', { minimumFractionDigits: 1 })} L`,
+      `$${Number(item.precio_unitario).toLocaleString('es-CO')}`,
+      `$${Number(item.total).toLocaleString('es-CO')}`,
+    ]);
+
+    // Fila Total
+    tableRows.push([
+      'VALOR TOTAL A LIQUIDAR',
+      `${entregasPendientes.length} despachos`,
+      `${totalLitrosPendientes.toLocaleString('es-CO', { minimumFractionDigits: 1 })} L`,
+      'Convenio',
+      `$${totalMontoPendiente.toLocaleString('es-CO')} COP`,
+    ]);
+
+    printReport({
+      title: 'CUENTA DE COBRO — LIQUIDACIÓN DE LECHE A QUESERA',
+      subtitle: 'Comprobante Oficial de Despachos y Cobro Periódico',
+      periodo: `Del ${fechaMin} al ${fechaMax}`,
+      metrics: [
+        { label: 'Total a Cobrar', value: `$${totalMontoPendiente.toLocaleString('es-CO')} COP`, color: '#0f766e' },
+        { label: 'Litros Despachados', value: `${totalLitrosPendientes.toLocaleString('es-CO', { minimumFractionDigits: 1 })} L`, color: '#0284c7' },
+        { label: 'Tarifa Convenio', value: '$1.950 / Litro' },
+        { label: 'Despachos Pendientes', value: `${entregasPendientes.length} entregas` },
+      ],
+      tableHeaders,
+      tableRows,
+      tableAligns,
+      footerNotes: [
+        'Documento expedido para trámite de cobro por concepto de suministro de leche cruda de ordeño.',
+        'Los abonos o pagos recibidos se aplicarán estrictamente por orden de antigüedad de los despachos (modelo FIFO).',
+        'Favor realizar el desembolso en efectivo a la administración de la lechería.',
+      ],
+      showSignature: true,
+      signatureTitle: 'Elaborado por (Finca / Lechería)',
+    });
+  };
+
+  // --- Exportar Detalle a Excel (CSV) ---
+  const handleExportCSV = () => {
+    if (entregasPendientes.length === 0) {
+      alert('No hay entregas pendientes para exportar.');
+      return;
+    }
+
+    const headers = ['Fecha Entrega', 'Jornada', 'Litros Despachados (L)', 'Precio Unitario ($ COP)', 'Subtotal ($ COP)', 'Estado'];
+    const rows: (string | number)[][] = entregasPendientes.map((item) => [
+      item.fecha,
+      item.jornada === 'manana' ? 'Mañana' : 'Tarde',
+      Number(item.litros).toFixed(1),
+      Number(item.precio_unitario),
+      Number(item.total),
+      item.estado,
+    ]);
+
+    rows.push([]);
+    rows.push(['--- TOTALES A LIQUIDAR ---', '', '', '', '']);
+    rows.push(['TOTAL LITROS', '', totalLitrosPendientes.toFixed(1) + ' L', '', '']);
+    rows.push(['TOTAL MONTO PENDIENTE ($ COP)', '', '', '', totalMontoPendiente]);
+
+    exportToCSV(`Cuenta_Cobro_Quesera_${today}`, headers, rows);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setMensaje(null);
@@ -107,7 +187,7 @@ export default function LiquidacionQuesera() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in pb-12">
       
       {/* Header */}
       <div className="pb-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -117,13 +197,33 @@ export default function LiquidacionQuesera() {
             <h1 className="text-2xl font-black text-white tracking-tight">Liquidación de Quesera (Cobro)</h1>
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            Registra el desembolso periódico recibido del convenio quesero. Marca entregas como pagadas e ingresa el dinero a caja.
+            Registra el desembolso periódico recibido, emite la cuenta de cobro en PDF e ingresa el dinero a caja física.
           </p>
         </div>
 
-        <span className="self-start sm:self-center px-3.5 py-1.5 rounded-full text-xs font-bold bg-teal-500/10 text-teal-400 border border-teal-500/20 uppercase tracking-wider">
-          Módulo Exclusivo Admin
-        </span>
+        {/* Acciones de Exportación y Rótulo */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExportCuentaCobroPDF}
+            disabled={entregasPendientes.length === 0}
+            className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all shadow-md shadow-teal-950/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Generar cuenta de cobro oficial en PDF para entregar a la quesera"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            <span>Cuenta de Cobro (PDF)</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            disabled={entregasPendientes.length === 0}
+            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-all disabled:opacity-50"
+            title="Exportar listado a Excel"
+          >
+            Excel (CSV)
+          </button>
+        </div>
       </div>
 
       {mensaje && (
@@ -151,7 +251,7 @@ export default function LiquidacionQuesera() {
               ${totalMontoPendiente.toLocaleString('es-CO')} <span className="text-sm font-semibold text-teal-400">COP</span>
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              Equivalente a {totalLitrosPendientes.toLocaleString()} Litros de leche entregados
+              Equivalente a {totalLitrosPendientes.toLocaleString('es-CO', { minimumFractionDigits: 1 })} Litros de leche entregados
             </p>
           </div>
           {totalMontoPendiente > 0 && (
@@ -160,7 +260,7 @@ export default function LiquidacionQuesera() {
               onClick={handleCobrarTodo}
               className="mt-2 py-2 px-4 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all self-start shadow-md shadow-teal-500/20 active:scale-95"
             >
-              Cobrar Liquidación Total ($ {totalMontoPendiente.toLocaleString()})
+              Cobrar Liquidación Total (${totalMontoPendiente.toLocaleString()})
             </button>
           )}
         </div>
@@ -251,7 +351,7 @@ export default function LiquidacionQuesera() {
               <input
                 type="text"
                 id="concepto"
-                placeholder="Ej. Liquidación quincena 1 (marzo) recibida en efectivo"
+                placeholder="Ej. Liquidación quincena 1 recibida en efectivo"
                 value={concepto}
                 onChange={(e) => setConcepto(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-teal-500 transition-all text-sm font-medium"
@@ -288,9 +388,14 @@ export default function LiquidacionQuesera() {
       {/* Lista de Entregas Pendientes */}
       {entregasPendientes.length > 0 && (
         <div className="card-dark border-slate-800 p-6 space-y-4 shadow-xl">
-          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Detalle de Entregas Pendientes ({entregasPendientes.length})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              Detalle de Entregas Pendientes ({entregasPendientes.length})
+            </h3>
+            <span className="text-[11px] font-bold text-teal-400">
+              Total: ${totalMontoPendiente.toLocaleString('es-CO')} COP
+            </span>
+          </div>
 
           <div className="divide-y divide-slate-800/80 max-h-96 overflow-y-auto pr-1">
             {entregasPendientes.map((item) => (

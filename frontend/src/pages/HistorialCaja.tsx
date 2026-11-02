@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { exportToCSV, printReport } from '../lib/exportUtils';
 
 interface MovimientoCaja {
   id: string;
@@ -82,7 +83,7 @@ export default function HistorialCaja() {
     fetchMovimientos();
   }, [fetchMovimientos]);
 
-  // Métricas del período considerando correctamente correcciones positivas y negativas
+  // Métricas del período
   const totalIngresos = movimientos.reduce((acc, m) => {
     const monto = Number(m.monto);
     if (['ingreso_venta', 'pago_cliente', 'pago_quesera'].includes(m.tipo)) {
@@ -111,33 +112,154 @@ export default function HistorialCaja() {
   const totalPaginas = Math.ceil(movimientos.length / PAGE_SIZE);
   const paginados = movimientos.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
 
+  // --- Exportar a Excel (CSV) ---
+  const handleExportCSV = () => {
+    if (movimientos.length === 0) {
+      alert('No hay movimientos en el período seleccionado para exportar.');
+      return;
+    }
+
+    const headers = ['Fecha', 'Hora', 'Tipo Operación', 'Concepto / Detalle', 'Ingreso ($ COP)', 'Egreso ($ COP)', 'Monto Neto'];
+    const rows: (string | number)[][] = movimientos.map((m) => {
+      const hora = new Date(m.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+      const tipoLabel = TIPO_LABELS[m.tipo]?.label || m.tipo;
+      const esIngreso = ['ingreso_venta', 'pago_cliente', 'pago_quesera'].includes(m.tipo) ||
+        (m.tipo === 'correccion' && Number(m.monto) > 0);
+      const montoAbs = Math.abs(Number(m.monto));
+
+      return [
+        m.fecha,
+        hora,
+        tipoLabel,
+        m.concepto || 'Sin concepto',
+        esIngreso ? montoAbs : 0,
+        !esIngreso ? montoAbs : 0,
+        esIngreso ? montoAbs : -montoAbs,
+      ];
+    });
+
+    // Fila totalizadora
+    rows.push([]);
+    rows.push(['--- TOTALES DEL PERÍODO ---', '', '', '', '', '', '']);
+    rows.push(['TOTAL INGRESOS', '', '', '', totalIngresos, '', '']);
+    rows.push(['TOTAL EGRESOS', '', '', '', '', totalEgresos, '']);
+    rows.push(['FLUJO NETO DE CAJA', '', '', '', '', '', saldoNeto]);
+
+    exportToCSV(`Libro_Caja_${desde}_al_${hasta}`, headers, rows);
+  };
+
+  // --- Descargar Reporte en PDF ---
+  const handleExportPDF = () => {
+    if (movimientos.length === 0) {
+      alert('No hay movimientos en el período seleccionado.');
+      return;
+    }
+
+    const tableHeaders = ['Fecha', 'Hora', 'Tipo', 'Concepto', 'Entradas ($)', 'Salidas ($)'];
+    const tableAligns: ('left' | 'center' | 'right')[] = ['left', 'center', 'left', 'left', 'right', 'right'];
+
+    const tableRows = movimientos.map((m) => {
+      const hora = new Date(m.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+      const meta = TIPO_LABELS[m.tipo] || { label: m.tipo };
+      const esIngreso = ['ingreso_venta', 'pago_cliente', 'pago_quesera'].includes(m.tipo) ||
+        (m.tipo === 'correccion' && Number(m.monto) > 0);
+      const montoFmt = fmtCOP(Number(m.monto));
+
+      return [
+        fmtFecha(m.fecha),
+        hora,
+        meta.label,
+        m.concepto || '—',
+        esIngreso ? `+${montoFmt}` : '—',
+        !esIngreso ? `-${montoFmt}` : '—',
+      ];
+    });
+
+    // Totales finales
+    tableRows.push([
+      'TOTALES',
+      '',
+      `${movimientos.length} movs`,
+      'Balance del período',
+      `+${fmtCOP(totalIngresos)}`,
+      `-${fmtCOP(totalEgresos)}`,
+    ]);
+
+    printReport({
+      title: 'Libro Diario de Movimientos de Caja',
+      subtitle: 'Control Financiero de Efectivo, Ingresos, Egresos y Arqueos',
+      periodo: `Del ${desde} al ${hasta}`,
+      metrics: [
+        { label: 'Total Ingresos', value: `+${fmtCOP(totalIngresos)}`, color: '#0f766e' },
+        { label: 'Total Egresos', value: `-${fmtCOP(totalEgresos)}`, color: '#e11d48' },
+        { label: 'Flujo Neto', value: `${saldoNeto >= 0 ? '+' : '-'}${fmtCOP(saldoNeto)}`, color: saldoNeto >= 0 ? '#0f766e' : '#e11d48' },
+        { label: 'Total Movimientos', value: `${movimientos.length}` },
+      ],
+      tableHeaders,
+      tableRows,
+      tableAligns,
+      footerNotes: [
+        'El presente documento refleja las entradas y salidas de efectivo registradas en la caja física de la lechería.',
+        'Los ingresos corresponden a ventas directas cobradas, abonos de clientes y cobros de la quesera.',
+        'Los egresos representan fletes de transporte, retiros de utilidad y liquidaciones de caja.',
+      ],
+      showSignature: true,
+      signatureTitle: 'Firma Administrador / Responsable de Caja',
+    });
+  };
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
       
       {/* Header */}
-      <div className="pb-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="pb-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 text-lg">📑</span>
             <h1 className="text-2xl font-black text-white tracking-tight">Historial de Caja Física</h1>
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            Libro diario de ingresos, egresos, retiros y correcciones trazables de dinero en efectivo.
+            Libro diario de ingresos, egresos, retiros y reportes contables en Excel y PDF.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Acciones de Cabecera */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExportCSV}
+            disabled={movimientos.length === 0}
+            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Exportar a Excel (CSV)"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Excel (CSV)</span>
+          </button>
+
+          <button
+            onClick={handleExportPDF}
+            disabled={movimientos.length === 0}
+            className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-blue-950/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Descargar PDF"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            <span>PDF</span>
+          </button>
+
           <Link
             to="/egresos"
-            className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-all"
+            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-all"
           >
-            - Registrar Egreso
+            - Egreso
           </Link>
           <Link
             to="/cierre-caja"
-            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/20"
+            className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/20"
           >
-            Arqueo y Cierre →
+            Arqueo →
           </Link>
         </div>
       </div>

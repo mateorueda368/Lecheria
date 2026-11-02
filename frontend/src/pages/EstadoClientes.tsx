@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { exportToCSV, printReport } from '../lib/exportUtils';
 
 // --- Types ---
 interface Cliente {
@@ -46,6 +47,7 @@ const fmtFecha = (iso: string) => {
 
 export default function EstadoClientes() {
   const navigate = useNavigate();
+  const today = new Date().toISOString().split('T')[0];
 
   const [clientes, setClientes] = useState<ClienteSaldo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,34 +160,210 @@ export default function EstadoClientes() {
 
   // Totales globales
   const totalDeuda = clientes.reduce((acc, c) => acc + c.saldoPendiente, 0);
+  const totalFiadoGeneral = clientes.reduce((acc, c) => acc + c.totalFiado, 0);
+  const totalPagadoGeneral = clientes.reduce((acc, c) => acc + c.totalPagado, 0);
   const clientesConDeuda = clientes.filter((c) => c.saldoPendiente > 0).length;
   const mayorDeudor = clientes[0]?.saldoPendiente > 0 ? clientes[0] : null;
 
+  // --- Exportar Cartera General a Excel (CSV) ---
+  const handleExportCarteraCSV = () => {
+    if (clientes.length === 0) {
+      alert('No hay clientes para exportar.');
+      return;
+    }
+
+    const headers = ['Nombre Cliente', 'Teléfono', 'Total Fiado Histórico ($ COP)', 'Total Pagado ($ COP)', 'Saldo Pendiente ($ COP)', 'Estado'];
+    const rows: (string | number)[][] = clientes.map((c) => [
+      c.nombre,
+      c.telefono || 'Sin teléfono',
+      c.totalFiado,
+      c.totalPagado,
+      c.saldoPendiente,
+      c.saldoPendiente > 0 ? 'Con Deuda' : 'Al Día',
+    ]);
+
+    rows.push([]);
+    rows.push(['--- RESUMEN GENERAL DE CARTERA ---', '', '', '', '', '']);
+    rows.push(['TOTAL CARTERA POR COBRAR', '', totalFiadoGeneral, totalPagadoGeneral, totalDeuda, '']);
+    rows.push(['Clientes con Saldo Deudor', clientesConDeuda.toString(), '', '', '', '']);
+
+    exportToCSV(`Cartera_Clientes_${today}`, headers, rows);
+  };
+
+  // --- Descargar Informe de Cartera en PDF ---
+  const handleExportCarteraPDF = () => {
+    if (clientes.length === 0) {
+      alert('No hay clientes registrados.');
+      return;
+    }
+
+    const tableHeaders = ['Cliente', 'Teléfono', 'Total Fiado', 'Total Pagado', 'Saldo Pendiente', 'Estado'];
+    const tableAligns: ('left' | 'center' | 'right' | 'right' | 'right' | 'center')[] = ['left', 'center', 'right', 'right', 'right', 'center'];
+
+    const tableRows = clientes.map((c) => [
+      c.nombre,
+      c.telefono || '—',
+      `$${c.totalFiado.toLocaleString('es-CO')}`,
+      `$${c.totalPagado.toLocaleString('es-CO')}`,
+      `$${c.saldoPendiente.toLocaleString('es-CO')}`,
+      c.saldoPendiente > 0 ? '⚠️ Pendiente' : '✅ Al día',
+    ]);
+
+    // Fila total
+    tableRows.push([
+      'TOTAL GENERAL',
+      `${clientes.length} clientes`,
+      `$${totalFiadoGeneral.toLocaleString('es-CO')}`,
+      `$${totalPagadoGeneral.toLocaleString('es-CO')}`,
+      `$${totalDeuda.toLocaleString('es-CO')} COP`,
+      `${clientesConDeuda} deudores`,
+    ]);
+
+    printReport({
+      title: 'Informe Consolidado de Cartera y Fiados',
+      subtitle: 'Balance General de Cuentas por Cobrar de Leche',
+      periodo: `Corte al ${today}`,
+      metrics: [
+        { label: 'Cartera Total Pendiente', value: `$${totalDeuda.toLocaleString('es-CO')} COP`, color: '#e11d48' },
+        { label: 'Clientes con Deuda', value: `${clientesConDeuda} clientes`, color: '#d97706' },
+        { label: 'Clientes al Día', value: `${clientes.length - clientesConDeuda} clientes`, color: '#0f766e' },
+        { label: 'Total Clientes', value: `${clientes.length}` },
+      ],
+      tableHeaders,
+      tableRows,
+      tableAligns,
+      footerNotes: [
+        'El presente informe refleja el saldo neto adeudado por concepto de leche suministrada a crédito.',
+        'Los abonos realizados por los clientes se imputan al saldo global del cliente ingresando inmediatamente a caja.',
+      ],
+      showSignature: true,
+      signatureTitle: 'Firma Responsable de Cartera / Cobranza',
+    });
+  };
+
+  // --- Extracto de Cuenta Individual en PDF para un Cliente ---
+  const handleExportExtractoClientePDF = (c: ClienteSaldo) => {
+    if (!detalle) return;
+
+    const tableHeaders = ['Fecha', 'Concepto / Operación', 'Tipo', 'Litros', 'Monto ($ COP)'];
+    const tableAligns: ('left' | 'left' | 'center' | 'right' | 'right')[] = ['left', 'left', 'center', 'right', 'right'];
+
+    // Combinar ventas y pagos cronológicamente
+    const movs: { fecha: string; concepto: string; tipo: string; litros: string; monto: number; isCargo: boolean }[] = [];
+
+    detalle.ventas.forEach((v) => {
+      movs.push({
+        fecha: v.fecha,
+        concepto: `Venta a crédito (${v.jornada === 'manana' ? 'Mañana' : 'Tarde'})`,
+        tipo: 'Cargo (Fiado)',
+        litros: `${Number(v.litros).toFixed(1)} L`,
+        monto: Number(v.total),
+        isCargo: true,
+      });
+    });
+
+    detalle.pagos.forEach((p) => {
+      movs.push({
+        fecha: p.fecha,
+        concepto: p.concepto || 'Abono a deuda de leche',
+        tipo: 'Abono (Pago)',
+        litros: '—',
+        monto: Number(p.monto),
+        isCargo: false,
+      });
+    });
+
+    // Ordenar por fecha descendente
+    movs.sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+    const tableRows = movs.map((m) => [
+      fmtFecha(m.fecha),
+      m.concepto,
+      m.tipo,
+      m.litros,
+      m.isCargo ? `+$${m.monto.toLocaleString('es-CO')}` : `-$${m.monto.toLocaleString('es-CO')}`,
+    ]);
+
+    tableRows.push([
+      'SALDO PENDIENTE ACTUAL',
+      '',
+      '',
+      '',
+      `$${c.saldoPendiente.toLocaleString('es-CO')} COP`,
+    ]);
+
+    printReport({
+      title: `EXTRACTO DE CUENTA — ${c.nombre.toUpperCase()}`,
+      subtitle: 'Comprobante Individual de Compras Fiadas y Abonos',
+      periodo: `Corte al ${today}`,
+      metrics: [
+        { label: 'Saldo Pendiente', value: `$${c.saldoPendiente.toLocaleString('es-CO')} COP`, color: c.saldoPendiente > 0 ? '#e11d48' : '#0f766e' },
+        { label: 'Total Fiado Histórico', value: `$${c.totalFiado.toLocaleString('es-CO')}` },
+        { label: 'Total Pagado', value: `$${c.totalPagado.toLocaleString('es-CO')}` },
+        { label: 'Teléfono', value: c.telefono || 'Sin registrar' },
+      ],
+      tableHeaders,
+      tableRows,
+      tableAligns,
+      footerNotes: [
+        `Comprobante individual para el cliente ${c.nombre}.`,
+        'Certifica las entregas de leche recibidas a crédito y los abonos entregados a la lechería.',
+      ],
+      showSignature: true,
+      signatureTitle: 'Firma del Cliente / Recibí Conforme',
+    });
+  };
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in">
+    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
       
       {/* Header */}
-      <div className="pb-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="pb-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-xl bg-amber-500/10 text-amber-400 text-lg">👥</span>
             <h1 className="text-2xl font-black text-white tracking-tight">Estado de Clientes y Fiados</h1>
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            Control de cuentas por cobrar, historial de compras fiadas y registros de abonos por cliente.
+            Control de cuentas por cobrar, historial de compras fiadas y reportes de cartera.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Acciones de Cabecera */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExportCarteraCSV}
+            disabled={clientes.length === 0}
+            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40 disabled:opacity-50"
+            title="Exportar cartera a Excel"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Excel (CSV)</span>
+          </button>
+
+          <button
+            onClick={handleExportCarteraPDF}
+            disabled={clientes.length === 0}
+            className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-blue-950/40 disabled:opacity-50"
+            title="Descargar informe de cartera en PDF"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            <span>Informe PDF</span>
+          </button>
+
           <Link
             to="/fiados"
-            className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-all"
+            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 transition-all"
           >
             + Venta Fiada
           </Link>
           <Link
             to="/cobrar-fiado"
-            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20"
+            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-md shadow-amber-600/20"
           >
             Cobrar Abono →
           </Link>
@@ -323,9 +501,30 @@ export default function EstadoClientes() {
 
                   {/* Panel Desplegable de Detalle (Ventas y Pagos) */}
                   {isSelected && (
-                    <div className="mt-3 p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-4 animate-fade-in">
+                    <div className="mt-3 p-4 sm:p-5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-4 animate-fade-in">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <div>
+                          <span className="text-xs font-bold text-white block">Movimientos de {c.nombre}</span>
+                          <span className="text-[10px] text-slate-400">Saldo actual adeudado: {fmtCOP(c.saldoPendiente)}</span>
+                        </div>
+
+                        {/* Botón Imprimir Extracto del Cliente */}
+                        <button
+                          type="button"
+                          onClick={() => handleExportExtractoClientePDF(c)}
+                          disabled={!detalle || (detalle.ventas.length === 0 && detalle.pagos.length === 0)}
+                          className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-950/40 disabled:opacity-50"
+                          title="Descargar extracto individual de cuenta en PDF para el cliente"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          <span>Extracto Individual (PDF)</span>
+                        </button>
+                      </div>
+
                       {loadingDetalle ? (
-                        <div className="py-4 text-center text-xs text-slate-400">
+                        <div className="py-6 text-center text-xs text-slate-400">
                           Cargando movimientos de {c.nombre}...
                         </div>
                       ) : (
