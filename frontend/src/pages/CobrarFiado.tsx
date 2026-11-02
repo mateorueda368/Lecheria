@@ -302,7 +302,7 @@ export default function CobrarFiado() {
                   <input
                     type="number"
                     id="monto"
-                    step="500"
+                    step="any"
                     min="1"
                     max={clienteSeleccionado?.saldoPendiente}
                     required

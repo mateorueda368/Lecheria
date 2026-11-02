@@ -241,7 +241,7 @@ export default function RegistrarCorreccion() {
             <input
               type="number"
               id="montoDif"
-              step="100"
+              step="any"
               placeholder="Ej. -5000 o +10000"
               value={montoDif}
               onChange={(e) => setMontoDif(e.target.value)}

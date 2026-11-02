@@ -230,7 +230,7 @@ export default function CierreCaja() {
                 Dinero Físico Contado ($)
               </label>
               <input
-                type="number" id="cajaFisica" step="100" min="0" required
+                type="number" id="cajaFisica" step="any" min="0" required
                 placeholder="Ej. 350000"
                 value={cajaFisicaInput} onChange={(e) => setCajaFisicaInput(e.target.value)}
                 className="input-dark w-full px-4 py-3 font-bold text-lg"
@@ -242,7 +242,7 @@ export default function CierreCaja() {
                 Base Siguiente Período ($)
               </label>
               <input
-                type="number" id="baseSiguiente" step="100" min="0" required
+                type="number" id="baseSiguiente" step="any" min="0" required
                 placeholder="200000"
                 value={baseSiguienteInput} onChange={(e) => setBaseSiguienteInput(e.target.value)}
                 className="input-dark w-full px-4 py-3 font-bold text-lg"

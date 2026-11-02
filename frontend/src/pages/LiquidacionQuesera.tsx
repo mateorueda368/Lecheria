@@ -227,7 +227,7 @@ export default function LiquidacionQuesera() {
                   <input
                     type="number"
                     id="monto"
-                    step="1000"
+                    step="any"
                     min="1"
                     max={totalMontoPendiente}
                     required
