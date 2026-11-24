@@ -1,0 +1,19 @@
+{
+  "name": "Sistema de Gestión de Lechería",
+  "short_name": "Lechería",
+  "description": "Control operativo de ordeño, inventario de leche y arqueo de caja",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

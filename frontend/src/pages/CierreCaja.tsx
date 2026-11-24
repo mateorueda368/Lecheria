@@ -231,6 +231,7 @@ export default function CierreCaja() {
               </label>
               <input
                 type="number" id="cajaFisica" step="any" min="0" required
+                inputMode="numeric"
                 placeholder="Ej. 350000"
                 value={cajaFisicaInput} onChange={(e) => setCajaFisicaInput(e.target.value)}
                 className="input-dark w-full px-4 py-3 font-bold text-lg"
@@ -243,6 +244,7 @@ export default function CierreCaja() {
               </label>
               <input
                 type="number" id="baseSiguiente" step="any" min="0" required
+                inputMode="numeric"
                 placeholder="200000"
                 value={baseSiguienteInput} onChange={(e) => setBaseSiguienteInput(e.target.value)}
                 className="input-dark w-full px-4 py-3 font-bold text-lg"

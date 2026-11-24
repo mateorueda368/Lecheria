@@ -306,6 +306,7 @@ export default function CobrarFiado() {
                     min="1"
                     max={clienteSeleccionado?.saldoPendiente}
                     required
+                    inputMode="numeric"
                     placeholder="0"
                     value={montoAbono}
                     onChange={(e) => setMontoAbono(e.target.value)}

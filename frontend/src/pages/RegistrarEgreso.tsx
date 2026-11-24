@@ -170,6 +170,7 @@ export default function RegistrarEgreso() {
                   step="any"
                   min="1"
                   required
+                  inputMode="numeric"
                   placeholder="0"
                   value={monto}
                   onChange={(e) => setMonto(e.target.value)}

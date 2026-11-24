@@ -224,6 +224,7 @@ export default function RegistrarCorreccion() {
               id="litrosDif"
               step="0.01"
               required={!isAdmin}
+              inputMode="decimal"
               placeholder="Ej. -2.5 o +5"
               value={litrosDif}
               onChange={(e) => setLitrosDif(e.target.value)}
@@ -242,6 +243,7 @@ export default function RegistrarCorreccion() {
               type="number"
               id="montoDif"
               step="any"
+              inputMode="numeric"
               placeholder="Ej. -5000 o +10000"
               value={montoDif}
               onChange={(e) => setMontoDif(e.target.value)}

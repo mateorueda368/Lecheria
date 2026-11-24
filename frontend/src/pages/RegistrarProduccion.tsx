@@ -262,6 +262,7 @@ export default function RegistrarProduccion() {
               step="0.1"
               min="0.1"
               required
+              inputMode="decimal"
               placeholder="0.0"
               value={litros}
               onChange={(e) => setLitros(e.target.value)}
