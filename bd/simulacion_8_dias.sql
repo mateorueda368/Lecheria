@@ -130,7 +130,7 @@ BEGIN
     SELECT * INTO r_quesera FROM public.registrar_entrega_quesera(d3, 'manana', 90.00);
     -- Abono Don Pedro: paga $15.000 de los $25.000 que debe
     SELECT * INTO r_pago_cli FROM public.registrar_pago_cliente(d3, v_cliente_pedro, 15000.00, 'Abono parcial de Don Pedro');
-    RAISE NOTICE 'Don Pedro abonó $15.000. Nuevo saldo deudor: $%', r_pago_cli.nuevo_saldo;
+    RAISE NOTICE 'Don Pedro abonó $15.000. Nuevo saldo deudor: $%', r_pago_cli.saldo_restante;
     SELECT * INTO r_prod FROM public.registrar_produccion(d3, 'tarde', 72.00);
     -- Corrección Trazable: Error en báscula de la tarde (-2L)
     SELECT * INTO r_correc FROM public.registrar_correccion(d3, 'produccion', r_prod.produccion_id, -2.00, 0.00, 'Ajuste por calibración de báscula');
@@ -160,7 +160,7 @@ BEGIN
     SELECT * INTO r_quesera FROM public.registrar_entrega_quesera(d5, 'manana', 100.00);
     -- Cancelación total deuda Doña Carmen: paga sus $20.000 completos
     SELECT * INTO r_pago_cli FROM public.registrar_pago_cliente(d5, v_cliente_carmen, 20000.00, 'Cancelación total deuda de leche');
-    RAISE NOTICE 'Doña Carmen pagó $20.000. Saldo restante: $%', r_pago_cli.nuevo_saldo;
+    RAISE NOTICE 'Doña Carmen pagó $20.000. Saldo restante: $%', r_pago_cli.saldo_restante;
     SELECT * INTO r_prod FROM public.registrar_produccion(d5, 'tarde', 75.00);
     PERFORM public.registrar_consumo(d5, 'tarde', 6.00, 'Consumo terneros');
     SELECT * INTO r_venta FROM public.registrar_venta_cobrada(d5, 'tarde', 10.00); -- $25.000
