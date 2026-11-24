@@ -95,7 +95,7 @@ BEGIN
     -- Venta directa 15L ($37.500)
     SELECT * INTO r_venta FROM public.registrar_venta_cobrada(d1, 'manana', 15.00);
     -- Venta fiada Don Pedro 10L ($25.000)
-    SELECT * INTO r_fiado FROM public.registrar_venta_fiada(v_cliente_pedro, d1, 'manana', 10.00);
+    SELECT * INTO r_fiado FROM public.registrar_venta_fiada(d1, 'manana', 10.00, v_cliente_pedro);
     -- Ordeño Tarde 75L
     SELECT * INTO r_prod FROM public.registrar_produccion(d1, 'tarde', 75.00);
     -- Consumo terneros 6L
@@ -112,7 +112,7 @@ BEGIN
     RAISE NOTICE '--- EJECUTANDO DÍA 2 (%) ---', d2;
     SELECT * INTO r_prod FROM public.registrar_produccion(d2, 'manana', 135.00);
     SELECT * INTO r_quesera FROM public.registrar_entrega_quesera(d2, 'manana', 90.00);
-    SELECT * INTO r_fiado FROM public.registrar_venta_fiada(v_cliente_carmen, d2, 'manana', 8.00); -- $20.000
+    SELECT * INTO r_fiado FROM public.registrar_venta_fiada(d2, 'manana', 8.00, v_cliente_carmen); -- $20.000
     SELECT * INTO r_prod FROM public.registrar_produccion(d2, 'tarde', 70.00);
     PERFORM public.registrar_consumo(d2, 'tarde', 5.00, 'Consumo cocina finca');
     SELECT * INTO r_venta FROM public.registrar_venta_cobrada(d2, 'tarde', 12.00); -- $30.000
@@ -146,7 +146,7 @@ BEGIN
     RAISE NOTICE '--- EJECUTANDO DÍA 4 (%) ---', d4;
     SELECT * INTO r_prod FROM public.registrar_produccion(d4, 'manana', 140.00);
     SELECT * INTO r_quesera FROM public.registrar_entrega_quesera(d4, 'manana', 100.00);
-    SELECT * INTO r_fiado FROM public.registrar_venta_fiada(v_cliente_juan, d4, 'manana', 12.00); -- $30.000
+    SELECT * INTO r_fiado FROM public.registrar_venta_fiada(d4, 'manana', 12.00, v_cliente_juan); -- $30.000
     SELECT * INTO r_prod FROM public.registrar_produccion(d4, 'tarde', 78.00);
     PERFORM public.registrar_consumo(d4, 'tarde', 5.00, 'Consumo terneros');
     SELECT * INTO r_venta FROM public.registrar_venta_cobrada(d4, 'tarde', 15.00); -- $37.500
@@ -174,7 +174,7 @@ BEGIN
     SELECT * INTO r_prod FROM public.registrar_produccion(d6, 'manana', 129.00);
     SELECT * INTO r_quesera FROM public.registrar_entrega_quesera(d6, 'manana', 95.00);
     -- Nueva venta fiada a Don Pedro (5L = $12.500)
-    SELECT * INTO r_fiado FROM public.registrar_venta_fiada(v_cliente_pedro, d6, 'manana', 5.00);
+    SELECT * INTO r_fiado FROM public.registrar_venta_fiada(d6, 'manana', 5.00, v_cliente_pedro);
     SELECT * INTO r_prod FROM public.registrar_produccion(d6, 'tarde', 73.00);
     PERFORM public.registrar_consumo(d6, 'tarde', 5.00, 'Consumo terneros');
     SELECT * INTO r_venta FROM public.registrar_venta_cobrada(d6, 'tarde', 8.00); -- $20.000
