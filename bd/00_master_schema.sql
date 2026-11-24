@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS public.movimientos_leche (
 );
 
 ALTER TABLE public.movimientos_leche ADD COLUMN IF NOT EXISTS concepto text;
+ALTER TABLE public.movimientos_leche ALTER COLUMN produccion_id DROP NOT NULL;
+ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_produccion_uk;
+ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_tipo_chk;
+ALTER TABLE public.movimientos_leche ADD CONSTRAINT movimientos_leche_tipo_chk 
+    CHECK (tipo IN ('produccion', 'venta_cobrada', 'venta_fiada', 'consumo', 'entrega_quesera', 'correccion'));
 ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_litros_chk;
 ALTER TABLE public.movimientos_leche ADD CONSTRAINT movimientos_leche_litros_chk CHECK (litros > 0 OR tipo = 'correccion');
 

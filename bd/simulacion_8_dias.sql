@@ -14,6 +14,23 @@
 -- 10. Arqueo y cierres de caja con retiro de utilidades sobre base
 -- =============================================================================
 
+-- Asegurar compatibilidad de restricciones de auditoría y correcciones
+ALTER TABLE public.movimientos_leche ADD COLUMN IF NOT EXISTS concepto text;
+ALTER TABLE public.movimientos_leche ALTER COLUMN produccion_id DROP NOT NULL;
+ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_produccion_uk;
+ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_tipo_chk;
+ALTER TABLE public.movimientos_leche ADD CONSTRAINT movimientos_leche_tipo_chk 
+    CHECK (tipo IN ('produccion', 'venta_cobrada', 'venta_fiada', 'consumo', 'entrega_quesera', 'correccion'));
+ALTER TABLE public.movimientos_leche DROP CONSTRAINT IF EXISTS movimientos_leche_litros_chk;
+ALTER TABLE public.movimientos_leche ADD CONSTRAINT movimientos_leche_litros_chk 
+    CHECK (litros > 0 OR tipo = 'correccion');
+
+ALTER TABLE public.movimientos_caja DROP CONSTRAINT IF EXISTS movimientos_caja_tipo_chk;
+ALTER TABLE public.movimientos_caja ADD CONSTRAINT movimientos_caja_tipo_chk 
+    CHECK (tipo IN ('ingreso_venta', 'pago_cliente', 'pago_quesera', 'egreso_flete', 'retiro', 'correccion'));
+ALTER TABLE public.movimientos_caja DROP CONSTRAINT IF EXISTS movimientos_caja_monto_chk;
+ALTER TABLE public.movimientos_caja ADD CONSTRAINT movimientos_caja_monto_chk CHECK (monto != 0);
+
 DO $$
 DECLARE
     v_admin_id uuid;
