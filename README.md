@@ -62,6 +62,21 @@ El archivo maestro consolidado se encuentra en [`bd/00_master_schema.sql`](bd/00
 
 ---
 
+## 🌐 Despliegue en Producción
+
+**URL en vivo:** [https://lecheria-thn6.vercel.app/](https://lecheria-thn6.vercel.app/)
+
+El proyecto está desplegado en **Vercel** conectado al branch `main` de GitHub. Cada push a `main` genera un redeploy automático.
+
+### Variables de Entorno en Vercel
+
+| Variable | Descripción |
+|---|---|
+| `VITE_SUPABASE_URL` | URL del proyecto Supabase |
+| `VITE_SUPABASE_ANON_KEY` | Clave anónima (pública) de Supabase |
+
+---
+
 ## 🚀 Ejecución en Desarrollo
 
 ```bash
@@ -71,3 +86,21 @@ npm run dev
 ```
 
 El aplicativo estará disponible en `http://localhost:5173`.
+
+---
+
+## 📱 PWA (Progressive Web App)
+
+La aplicación es instalable desde el navegador móvil como una app nativa:
+1. Abre [https://lecheria-thn6.vercel.app/](https://lecheria-thn6.vercel.app/) en Chrome/Safari.
+2. Toca **"Agregar a pantalla de inicio"** o **"Instalar"**.
+3. La app se abrirá en modo pantalla completa sin barra de navegador.
+
+---
+
+## 👥 Roles del Sistema
+
+| Rol | Acceso |
+|---|---|
+| **Trabajador** | Dashboard, Registrar Ordeño, Historial, Ventas, Fiados, Consumo, Quesera, Correcciones |
+| **Administrador** | Todo lo anterior + Cobrar Fiados, Liquidación Quesera, Egresos, Cierre de Caja, Historial Caja, Estado de Clientes |
